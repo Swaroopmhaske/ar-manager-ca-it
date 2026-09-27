@@ -258,3 +258,69 @@ export function customerPosition(
     overLimit,
   };
 }
+export type ControlCheck = {
+  customerId: number;
+  expected: Paise;
+  calculated: Paise;
+  difference: Paise;
+  passed: boolean;
+};
+
+export function controlCheck(
+  data: ArData,
+  asOf: string
+): ControlCheck[] {
+  return data.customers.map((customer) => {
+    const customerInvoices = data.invoices.filter(
+      (invoice) =>
+        invoice.customerId === customer.id &&
+        !invoice.isCancelled &&
+        invoice.invoiceDate <= asOf
+    );
+
+    const invoiceTotals = customerInvoices.reduce(
+      (sum, invoice) => sum + invoice.total,
+      0
+    );
+
+    const creditNoteTotals = data.creditNotes
+      .filter(
+        (creditNote) =>
+          customerInvoices.some(
+            (invoice) => invoice.id === creditNote.invoiceId
+          ) &&
+          creditNote.creditNoteDate <= asOf
+      )
+      .reduce((sum, creditNote) => sum + creditNote.total, 0);
+
+    const receiptSettlement = data.receipts
+      .filter(
+        (receipt) =>
+          receipt.customerId === customer.id &&
+          receipt.receiptDate <= asOf
+      )
+      .reduce(
+        (sum, receipt) =>
+          sum + settlementValue(receipt.bankAmount, receipt.tdsAmount),
+        0
+      );
+
+    const expected =
+      invoiceTotals -
+      creditNoteTotals -
+      receiptSettlement;
+
+    const position = customerPosition(data, customer.id, asOf);
+
+    const calculated = position.netBalance;
+    const difference = calculated - expected;
+
+    return {
+      customerId: customer.id,
+      expected,
+      calculated,
+      difference,
+      passed: difference === 0,
+    };
+  });
+}

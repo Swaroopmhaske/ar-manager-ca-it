@@ -3,6 +3,7 @@ import sample from "./fixtures/sample.json";
 import type { ArData } from "@/lib/ar/types";
 import {
   bucketFor,
+  controlCheck,
   customerPosition,
   invoicePosition,
 } from "@/lib/ar/calculations";
@@ -266,5 +267,33 @@ describe("Customer positions", () => {
     expect(position.netBalance).toBe(
       toPaise(-100000)
     );
+  });
+});
+describe("R14 control check", () => {
+  it("has no differences for any customer as at 31-Aug-2026", () => {
+    const checks = controlCheck(data, "2026-08-31");
+
+    expect(checks).toHaveLength(data.customers.length);
+    expect(checks.every((check) => check.passed)).toBe(true);
+    expect(checks.every((check) => check.difference === 0)).toBe(true);
+  });
+
+  it("has no differences for any customer on multiple dates", () => {
+    const dates = [
+      "2026-04-01",
+      "2026-07-12",
+      "2026-08-31",
+      "2026-09-06",
+      "2026-09-15",
+    ];
+
+    for (const asOf of dates) {
+      const checks = controlCheck(data, asOf);
+
+      expect(
+        checks.every((check) => check.passed),
+        `R14 failed for ${asOf}`
+      ).toBe(true);
+    }
   });
 });
