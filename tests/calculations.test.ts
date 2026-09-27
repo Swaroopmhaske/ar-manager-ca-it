@@ -6,6 +6,7 @@ import {
   controlCheck,
   customerPosition,
   invoicePosition,
+  statement,
 } from "@/lib/ar/calculations";
 
 function toPaise(value: number): number {
@@ -295,5 +296,126 @@ describe("R14 control check", () => {
         `R14 failed for ${asOf}`
       ).toBe(true);
     }
+  });
+});
+describe("R15 statement", () => {
+  it("calculates the published C002 statement check", () => {
+    const result = statement(
+      data,
+      data.customers.find((customer) => customer.code === "C002")!.id,
+      "2026-04-01",
+      "2026-08-31"
+    );
+
+    expect(result.openingBalance).toBe(7080000);
+    expect(result.closingBalance).toBe(22300000);
+    expect(result.lines).toHaveLength(7);
+  });
+
+  it("keeps same-day lines in the required order", () => {
+    const result = statement(
+      data,
+      data.customers.find((customer) => customer.code === "C002")!.id,
+      "2026-04-01",
+      "2026-08-31"
+    );
+
+    const order = {
+      Invoice: 1,
+      "Credit Note": 2,
+      "Payment received": 3,
+      "TDS deducted by you": 4,
+    };
+
+    for (let i = 1; i < result.lines.length; i++) {
+      const previous = result.lines[i - 1];
+      const current = result.lines[i];
+
+      if (previous.date === current.date) {
+        expect(order[previous.type]).toBeLessThanOrEqual(
+          order[current.type]
+        );
+      }
+    }
+  });
+
+  it("keeps TDS as a separate credit line", () => {
+    const result = statement(
+      data,
+      data.customers.find((customer) => customer.code === "C004")!.id,
+      "2026-08-01",
+      "2026-08-31"
+    );
+
+    const tdsLines = result.lines.filter(
+      (line) => line.type === "TDS deducted by you"
+    );
+
+    expect(tdsLines.length).toBeGreaterThan(0);
+
+    for (const line of tdsLines) {
+      expect(line.debit).toBe(0);
+      expect(line.credit).toBeGreaterThan(0);
+    }
+  });
+
+  it("does not include cancelled invoices", () => {
+    const result = statement(
+      data,
+      data.customers.find((customer) => customer.code === "C003")!.id,
+      "2026-01-01",
+      "2026-09-30"
+    );
+
+    const cancelledInvoice = data.invoices.find(
+      (invoice) => invoice.isCancelled
+    );
+
+    if (
+      cancelledInvoice?.customerId ===
+      data.customers.find((customer) => customer.code === "C003")!.id
+    ) {
+      expect(
+        result.lines.some(
+          (line) => line.documentNo === cancelledInvoice.invoiceNo
+        )
+      ).toBe(false);
+    }
+  });
+
+  it("closing balance agrees with R14 customer position", () => {
+    const customer = data.customers.find(
+      (customer) => customer.code === "C002"
+    )!;
+
+    const result = statement(
+      data,
+      customer.id,
+      "2026-04-01",
+      "2026-08-31"
+    );
+
+    const position = customerPosition(
+      data,
+      customer.id,
+      "2026-08-31"
+    );
+
+    expect(result.closingBalance).toBe(position.netBalance);
+  });
+
+  it("keeps unapplied credit separate from the statement balance", () => {
+    const customer = data.customers.find(
+      (customer) => customer.code === "C005"
+    )!;
+
+    const result = statement(
+      data,
+      customer.id,
+      "2026-07-01",
+      "2026-08-31"
+    );
+
+    expect(result.unappliedCredit).toBe(10000000);
   });
 });

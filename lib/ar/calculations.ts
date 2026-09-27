@@ -6,7 +6,7 @@ import type {
   Paise,
   Receipt,
 } from "./types";
-import { daysBetween, settlementValue } from "./date";
+import { addDays,daysBetween, settlementValue } from "./date";
 
 export type AgeingBucket =
   | "Not due"
@@ -323,4 +323,164 @@ export function controlCheck(
       passed: difference === 0,
     };
   });
+}
+export type StatementLineType =
+  | "Invoice"
+  | "Credit Note"
+  | "Payment received"
+  | "TDS deducted by you";
+
+export type StatementLine = {
+  date: string;
+  type: StatementLineType;
+  documentNo: string;
+  debit: Paise;
+  credit: Paise;
+  balance: Paise;
+};
+
+export type StatementResult = {
+  openingBalance: Paise;
+  lines: StatementLine[];
+  closingBalance: Paise;
+  ageing: Record<AgeingBucket, Paise>;
+  unappliedCredit: Paise;
+};
+
+export function statement(
+  data: ArData,
+  customerId: number,
+  from: string,
+  to: string
+): StatementResult {
+  const openingBalance = customerPosition(
+    data,
+    customerId,
+    addDays(from, -1)
+  ).netBalance;
+
+  const lines: Array<{
+    date: string;
+    type: StatementLineType;
+    documentNo: string;
+    debit: Paise;
+    credit: Paise;
+    order: number;
+  }> = [];
+
+  // Invoices
+  for (const invoice of data.invoices) {
+    if (
+      invoice.customerId !== customerId ||
+      invoice.isCancelled ||
+      invoice.invoiceDate < from ||
+      invoice.invoiceDate > to
+    ) {
+      continue;
+    }
+
+    lines.push({
+      date: invoice.invoiceDate,
+      type: "Invoice",
+      documentNo: invoice.invoiceNo,
+      debit: invoice.total,
+      credit: 0,
+      order: 1,
+    });
+  }
+
+  // Credit notes
+  for (const creditNote of data.creditNotes) {
+    const invoice = data.invoices.find(
+      (item) => item.id === creditNote.invoiceId
+    );
+
+    if (
+      !invoice ||
+      invoice.customerId !== customerId ||
+      invoice.isCancelled ||
+      creditNote.creditNoteDate < from ||
+      creditNote.creditNoteDate > to
+    ) {
+      continue;
+    }
+
+    lines.push({
+      date: creditNote.creditNoteDate,
+      type: "Credit Note",
+      documentNo: creditNote.creditNoteNo,
+      debit: 0,
+      credit: creditNote.total,
+      order: 2,
+    });
+  }
+
+  // Receipts
+  for (const receipt of data.receipts) {
+    if (
+      receipt.customerId !== customerId ||
+      receipt.receiptDate < from ||
+      receipt.receiptDate > to
+    ) {
+      continue;
+    }
+
+    lines.push({
+      date: receipt.receiptDate,
+      type: "Payment received",
+      documentNo: receipt.receiptNo,
+      debit: 0,
+      credit: receipt.bankAmount,
+      order: 3,
+    });
+
+    if (receipt.tdsAmount > 0) {
+      lines.push({
+        date: receipt.receiptDate,
+        type: "TDS deducted by you",
+        documentNo: receipt.receiptNo,
+        debit: 0,
+        credit: receipt.tdsAmount,
+        order: 4,
+      });
+    }
+  }
+
+  lines.sort((a, b) => {
+    if (a.date !== b.date) {
+      return a.date.localeCompare(b.date);
+    }
+
+    if (a.order !== b.order) {
+      return a.order - b.order;
+    }
+
+    return a.documentNo.localeCompare(b.documentNo);
+  });
+
+  let runningBalance = openingBalance;
+
+  const statementLines = lines.map((line) => {
+    runningBalance += line.debit;
+    runningBalance -= line.credit;
+
+    return {
+      date: line.date,
+      type: line.type,
+      documentNo: line.documentNo,
+      debit: line.debit,
+      credit: line.credit,
+      balance: runningBalance,
+    };
+  });
+
+  const position = customerPosition(data, customerId, to);
+
+  return {
+    openingBalance,
+    lines: statementLines,
+    closingBalance: runningBalance,
+    ageing: position.ageing,
+    unappliedCredit: position.unappliedCredit,
+  };
 }
