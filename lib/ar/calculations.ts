@@ -39,7 +39,18 @@ export interface CustomerPosition {
   ageing: Record<AgeingBucket, Paise>;
   overLimit: boolean;
 }
+export function creditLimitUsedPct(
+  position: CustomerPosition,
+  creditLimit: Paise
+): number {
+  if (creditLimit <= 0) {
+    return 0;
+  }
 
+  return Math.round(
+    (position.outstanding / creditLimit) * 100
+  );
+}
 function activeInvoiceAsOf(
   invoice: Invoice,
   asOf: string
