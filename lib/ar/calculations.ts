@@ -553,3 +553,50 @@ export function notePositions(
       promiseStatus: promiseStatus(data, note, asOf),
     }));
 }
+export function dso(
+  data: ArData,
+  asOf: string
+): number | null {
+  const windowStart = addDays(asOf, -89);
+
+  const invoiceBase = data.invoices
+    .filter(
+      (invoice) =>
+        !invoice.isCancelled &&
+        invoice.invoiceDate >= windowStart &&
+        invoice.invoiceDate <= asOf
+    )
+    .reduce((sum, invoice) => sum + invoice.total, 0);
+
+  const creditNoteBase = data.creditNotes
+    .filter(
+      (creditNote) =>
+        creditNote.creditNoteDate >= windowStart &&
+        creditNote.creditNoteDate <= asOf
+    )
+    .reduce((sum, creditNote) => sum + creditNote.total, 0);
+
+  const s = invoiceBase - creditNoteBase;
+
+  if (s === 0) {
+    return null;
+  }
+
+  const outstanding = data.invoices
+    .filter(
+      (invoice) =>
+        !invoice.isCancelled &&
+        invoice.invoiceDate <= asOf
+    )
+    .reduce((sum, invoice) => {
+      const position = invoicePosition(
+        data,
+        invoice,
+        asOf
+      );
+
+      return sum + (position?.outstanding ?? 0);
+    }, 0);
+
+  return Math.round((outstanding / s) * 90);
+}

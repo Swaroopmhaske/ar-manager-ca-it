@@ -7,6 +7,7 @@ import {
   customerPosition,
   invoicePosition,
   statement,
+  dso,
   notePositions,
   promiseStatus,
 } from "@/lib/ar/calculations";
@@ -469,5 +470,46 @@ describe("R16 notes and promises", () => {
         (position) => position.note.noteDate <= "2026-07-01"
       )
     ).toBe(true);
+  });
+});
+describe("R17 DSO", () => {
+  it("returns a whole number of days", () => {
+    const result = dso(data, "2026-08-31");
+
+    expect(result).not.toBeNull();
+    expect(Number.isInteger(result)).toBe(true);
+  });
+
+  it("uses a 90-day invoice window ending on the as-at date", () => {
+    const asOf = "2026-08-31";
+    const result = dso(data, asOf);
+
+    expect(result).not.toBeNull();
+
+    const windowStart = "2026-06-03";
+
+    const invoicesInWindow = data.invoices.filter(
+      (invoice) =>
+        !invoice.isCancelled &&
+        invoice.invoiceDate >= windowStart &&
+        invoice.invoiceDate <= asOf
+    );
+
+    expect(invoicesInWindow.length).toBeGreaterThan(0);
+  });
+
+  it("returns null when the denominator is zero", () => {
+    const emptyData: ArData = {
+      customers: data.customers,
+      invoices: [],
+      creditNotes: [],
+      receipts: [],
+      allocations: [],
+      notes: [],
+    };
+
+    expect(
+      dso(emptyData, "2026-08-31")
+    ).toBeNull();
   });
 });
