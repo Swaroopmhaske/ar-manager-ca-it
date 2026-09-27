@@ -4,6 +4,7 @@ import type {
   CreditNote,
   Invoice,
   Paise,
+  Note,
   Receipt,
 } from "./types";
 import { addDays,daysBetween, settlementValue } from "./date";
@@ -483,4 +484,72 @@ export function statement(
     ageing: position.ageing,
     unappliedCredit: position.unappliedCredit,
   };
+}
+export type PromiseStatus = "Kept" | "Broken" | "Pending";
+
+export type NotePosition = {
+  note: Note;
+  followUpDue: boolean;
+  promiseStatus: PromiseStatus | null;
+};
+
+export function promiseStatus(
+  data: ArData,
+  note: Note,
+  asOf: string
+): PromiseStatus | null {
+  // Notes dated after the as-at date do not exist yet.
+  if (note.noteDate > asOf) {
+    return null;
+  }
+
+  // A note without both promise date and promise amount has no promise.
+  if (note.promiseDate === null || note.promiseAmount === null) {
+    return null;
+  }
+
+  const endDate =
+    note.promiseDate < asOf ? note.promiseDate : asOf;
+
+  const settlementReceived = data.receipts
+    .filter(
+      (receipt) =>
+        receipt.customerId === note.customerId &&
+        receipt.receiptDate >= note.noteDate &&
+        receipt.receiptDate <= endDate
+    )
+    .reduce(
+      (sum, receipt) =>
+        sum + settlementValue(
+          receipt.bankAmount,
+          receipt.tdsAmount
+        ),
+      0
+    );
+
+  if (settlementReceived >= note.promiseAmount) {
+    return "Kept";
+  }
+
+  if (note.promiseDate < asOf) {
+    return "Broken";
+  }
+
+  return "Pending";
+}
+
+export function notePositions(
+  data: ArData,
+  asOf: string
+): NotePosition[] {
+  return data.notes
+    .filter((note) => note.noteDate <= asOf)
+    .map((note) => ({
+      note,
+      followUpDue:
+        note.followUpDate !== null &&
+        note.followUpDate <= asOf &&
+        !note.followUpDone,
+      promiseStatus: promiseStatus(data, note, asOf),
+    }));
 }

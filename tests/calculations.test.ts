@@ -7,6 +7,8 @@ import {
   customerPosition,
   invoicePosition,
   statement,
+  notePositions,
+  promiseStatus,
 } from "@/lib/ar/calculations";
 
 function toPaise(value: number): number {
@@ -417,5 +419,55 @@ describe("R15 statement", () => {
     );
 
     expect(result.unappliedCredit).toBe(10000000);
+  });
+});
+describe("R16 notes and promises", () => {
+  it("marks the published C002 promise as Broken", () => {
+    const note = data.notes.find(
+      (item) =>
+        item.customerId ===
+          data.customers.find(
+            (customer) => customer.code === "C002"
+          )!.id &&
+        item.noteDate === "2026-07-20"
+    );
+
+    expect(note).toBeDefined();
+
+    expect(
+      promiseStatus(data, note!, "2026-08-31")
+    ).toBe("Broken");
+  });
+
+  it("identifies open follow-ups due as at the selected date", () => {
+    const positions = notePositions(
+      data,
+      "2026-09-06"
+    );
+
+    const dueFollowUps = positions.filter(
+      (position) => position.followUpDue
+    );
+
+    expect(dueFollowUps.length).toBeGreaterThan(0);
+
+    for (const position of dueFollowUps) {
+      expect(position.note.followUpDate).not.toBeNull();
+      expect(position.note.followUpDate! <= "2026-09-06").toBe(true);
+      expect(position.note.followUpDone).toBe(false);
+    }
+  });
+
+  it("does not consider notes dated after the as-at date", () => {
+    const positions = notePositions(
+      data,
+      "2026-07-01"
+    );
+
+    expect(
+      positions.every(
+        (position) => position.note.noteDate <= "2026-07-01"
+      )
+    ).toBe(true);
   });
 });
