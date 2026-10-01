@@ -2,6 +2,7 @@ import Link from "next/link";
 import { loadArData } from "@/lib/ar/load";
 import { getAsOf } from "@/lib/asof";
 import {
+  AGEING_BUCKETS,
   customerPosition,
   invoicePosition,
   dso,
@@ -158,12 +159,11 @@ export default async function Dashboard({
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
                 <th className="px-3 py-3">Customer</th>
-                <th className="px-3 py-3 text-right">Not due</th>
-                <th className="px-3 py-3 text-right">1–30</th>
-                <th className="px-3 py-3 text-right">31–60</th>
-                <th className="px-3 py-3 text-right">61–90</th>
-                <th className="px-3 py-3 text-right">91–180</th>
-                <th className="px-3 py-3 text-right">Over 180</th>
+                {AGEING_BUCKETS.map((bucket) => (
+                  <th key={bucket} className="px-3 py-3 text-right">
+                    {bucket}
+                  </th>
+                ))}
                 <th className="px-3 py-3 text-right">Unapplied</th>
               </tr>
             </thead>
@@ -183,29 +183,11 @@ export default async function Dashboard({
                     </Link>
                   </td>
 
-                  <td className="px-3 py-3 text-right">
-                    {formatAmount(position.ageing["Not due"])}
-                  </td>
-
-                  <td className="px-3 py-3 text-right">
-                    {formatAmount(position.ageing["1-30"])}
-                  </td>
-
-                  <td className="px-3 py-3 text-right">
-                    {formatAmount(position.ageing["31-60"])}
-                  </td>
-
-                  <td className="px-3 py-3 text-right">
-                    {formatAmount(position.ageing["61-90"])}
-                  </td>
-
-                  <td className="px-3 py-3 text-right">
-                    {formatAmount(position.ageing["91-180"])}
-                  </td>
-
-                  <td className="px-3 py-3 text-right">
-                    {formatAmount(position.ageing["Over 180"])}
-                  </td>
+                  {AGEING_BUCKETS.map((bucket) => (
+                    <td key={bucket} className="px-3 py-3 text-right">
+                      {formatAmount(position.ageing[bucket])}
+                    </td>
+                  ))}
 
                   <td className="px-3 py-3 text-right">
                     {formatAmount(position.unappliedCredit)}

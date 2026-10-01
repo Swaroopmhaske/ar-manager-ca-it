@@ -5,17 +5,17 @@ import type {
   Invoice,
   Paise,
   Note,
-  Receipt,
 } from "./types";
-import { addDays,daysBetween, settlementValue } from "./date";
+import { addDays, daysBetween, settlementValue } from "./date";
+import {
+  bucketFor,
+  emptyAgeing,
+  type Ageing,
+  type AgeingBucket,
+} from "./ageing";
 
-export type AgeingBucket =
-  | "Not due"
-  | "1-30"
-  | "31-60"
-  | "61-90"
-  | "91-180"
-  | "Over 180";
+export { AGEING_BUCKETS, bucketFor, emptyAgeing, sumAgeing } from "./ageing";
+export type { Ageing, AgeingBucket } from "./ageing";
 
 export type InvoiceStatus = "Paid" | "Due" | "Overdue";
 
@@ -36,20 +36,30 @@ export interface CustomerPosition {
   overdue: Paise;
   unappliedCredit: Paise;
   netBalance: Paise;
-  ageing: Record<AgeingBucket, Paise>;
+  ageing: Ageing;
   overLimit: boolean;
 }
+
+/**
+ * Share of the credit limit in use, as a whole percentage.
+ *
+ * Based on NET balance (invoice outstanding − unapplied credit), the same
+ * figure R13 uses for "over limit", so the percentage and the over-limit
+ * flag can never disagree. Money already received but not yet allocated
+ * reduces exposure. A credit (Cr) balance uses none of the limit: 0%.
+ * A zero limit with a positive balance is reported as 100% (fully used).
+ */
 export function creditLimitUsedPct(
   position: CustomerPosition,
   creditLimit: Paise
 ): number {
+  const used = Math.max(0, position.netBalance);
+
   if (creditLimit <= 0) {
-    return 0;
+    return used > 0 ? 100 : 0;
   }
 
-  return Math.round(
-    (position.outstanding / creditLimit) * 100
-  );
+  return Math.round((used / creditLimit) * 100);
 }
 function activeInvoiceAsOf(
   invoice: Invoice,
@@ -149,16 +159,6 @@ export function invoicePosition(
   };
 }
 
-export function bucketFor(
-  daysPastDue: number
-): AgeingBucket {
-  if (daysPastDue <= 0) return "Not due";
-  if (daysPastDue <= 30) return "1-30";
-  if (daysPastDue <= 60) return "31-60";
-  if (daysPastDue <= 90) return "61-90";
-  if (daysPastDue <= 180) return "91-180";
-  return "Over 180";
-}
 
 function unappliedCreditForCustomer(
   data: ArData,
@@ -205,14 +205,7 @@ export function customerPosition(
   customerId: number,
   asOf: string
 ): CustomerPosition {
-  const ageing: Record<AgeingBucket, Paise> = {
-    "Not due": 0,
-    "1-30": 0,
-    "31-60": 0,
-    "61-90": 0,
-    "91-180": 0,
-    "Over 180": 0,
-  };
+  const ageing = emptyAgeing();
 
   let outstanding = 0;
   let overdue = 0;
@@ -270,6 +263,24 @@ export function customerPosition(
     overLimit,
   };
 }
+/** R13 for every customer, in customer-code order. */
+export function customerPositions(
+  data: ArData,
+  asOf: string
+): CustomerPosition[] {
+  return [...data.customers]
+    .sort((a, b) => a.code.localeCompare(b.code))
+    .map((customer) => customerPosition(data, customer.id, asOf));
+}
+
+/**
+ * R14 as the brief names it: only the customers whose net balance differs
+ * from the document formula. Must always be an empty list.
+ */
+export function balanceCheck(data: ArData, asOf: string): ControlCheck[] {
+  return controlCheck(data, asOf).filter((check) => !check.passed);
+}
+
 export type ControlCheck = {
   customerId: number;
   expected: Paise;
@@ -355,7 +366,7 @@ export type StatementResult = {
   openingBalance: Paise;
   lines: StatementLine[];
   closingBalance: Paise;
-  ageing: Record<AgeingBucket, Paise>;
+  ageing: Ageing;
   unappliedCredit: Paise;
 };
 

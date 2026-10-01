@@ -3,6 +3,7 @@ import Link from "next/link";
 import { loadArData } from "@/lib/ar/load";
 import { getAsOf } from "@/lib/asof";
 import {
+  AGEING_BUCKETS,
   customerPosition,
   invoicePosition,
 } from "@/lib/ar/calculations";
@@ -87,14 +88,9 @@ export default async function CustomerPage({
       b.noteDate.localeCompare(a.noteDate)
     );
 
-  const ageingRows = [
-    ["Not due", position.ageing["Not due"]],
-    ["1–30", position.ageing["1-30"]],
-    ["31–60", position.ageing["31-60"]],
-    ["61–90", position.ageing["61-90"]],
-    ["91–180", position.ageing["91-180"]],
-    ["Over 180", position.ageing["Over 180"]],
-  ] as const;
+  const ageingRows = AGEING_BUCKETS.map(
+    (bucket) => [bucket, position.ageing[bucket]] as const
+  );
 
   return (
     <main className="min-h-screen p-8">
