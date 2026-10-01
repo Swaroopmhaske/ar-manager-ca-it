@@ -3,6 +3,7 @@ import Link from "next/link";
 import { loadArData } from "@/lib/ar/load";
 import { getAsOf } from "@/lib/asof";
 import { receiptListRows } from "@/lib/ar/lists";
+import { customer360 } from "@/lib/ar/collections";
 import {
   AGEING_BUCKETS,
   customerPosition,
@@ -73,19 +74,10 @@ export default async function CustomerPage({
       ),
     }));
 
+  const c360 = customer360(data, customer.id, asof);
   const receipts = receiptListRows(data, asof).filter(
     (row) => row.receipt.customerId === customer.id
   );
-
-  const notes = data.notes
-    .filter(
-      (note) =>
-        note.customerId === customer.id &&
-        note.noteDate <= asof
-    )
-    .sort((a, b) =>
-      b.noteDate.localeCompare(a.noteDate)
-    );
 
   const ageingRows = AGEING_BUCKETS.map(
     (bucket) => [bucket, position.ageing[bucket]] as const
@@ -215,6 +207,78 @@ export default async function CustomerPage({
             </p>
           </div>
         </div>
+
+        <section className="mt-6 rounded-xl bg-white p-5 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">Collection summary</h2>
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                c360.creditStatus === "Over Limit"
+                  ? "bg-red-100 text-red-800"
+                  : c360.creditStatus === "Near Limit"
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-green-100 text-green-800"
+              }`}
+              title="Workflow indicator: over limit, or 80% or more of the limit used. Not a credit-risk score."
+            >
+              {c360.creditStatus} · {c360.utilisationPct}% of limit used
+            </span>
+          </div>
+          <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <Fact label="Credit limit" value={formatAmount(c360.creditLimit)} />
+            <Fact label="Net balance (after unapplied)" value={formatDrCr(c360.netBalance)} strong />
+            <Fact label="Invoice outstanding (gross)" value={formatAmount(c360.outstanding)} />
+            <Fact label="Unapplied credit held" value={formatAmount(c360.unappliedCredit)} tone={c360.unappliedCredit > 0 ? "amber" : undefined} />
+            <Fact label="Overdue" value={formatAmount(c360.overdue)} tone={c360.overdue > 0 ? "red" : undefined} />
+            <Fact label="Not yet due" value={formatAmount(c360.notDue)} />
+            <Fact
+              label="Open / overdue invoices"
+              value={`${c360.openInvoices} / ${c360.overdueInvoices}`}
+              href={`/invoices?asof=${asof}&customer=${customer.id}&status=Overdue`}
+            />
+            <Fact
+              label="Oldest overdue"
+              value={
+                c360.oldestOverdue
+                  ? `${c360.oldestOverdue.invoice.invoiceNo} · ${c360.oldestOverdue.daysPastDue} days`
+                  : "—"
+              }
+              href={c360.oldestOverdue ? `/invoices/${c360.oldestOverdue.invoice.id}?asof=${asof}` : undefined}
+              tone={c360.oldestOverdue ? "red" : undefined}
+            />
+            <Fact
+              label="Promises: broken / pending"
+              value={`${c360.brokenPromises} / ${c360.pendingPromises}`}
+              tone={c360.brokenPromises > 0 ? "red" : undefined}
+            />
+            <Fact
+              label="Follow-ups due"
+              value={String(c360.followUpsDue)}
+              href={`/customers/${customer.id}/notes?asof=${asof}`}
+              tone={c360.followUpsDue > 0 ? "amber" : undefined}
+            />
+            <Fact
+              label="Last receipt"
+              value={
+                c360.lastReceipt
+                  ? `${formatDate(c360.lastReceipt.receipt.receiptDate)} · ${formatAmount(c360.lastReceipt.settlement)}`
+                  : "None"
+              }
+              href={c360.lastReceipt ? `/receipts/${c360.lastReceipt.receipt.id}/allocate?asof=${asof}` : undefined}
+            />
+            <Fact
+              label="Worklist"
+              value="Open in Collections →"
+              href={`/collections?asof=${asof}&customer=${customer.id}&show=all`}
+            />
+          </dl>
+          {c360.unappliedCredit > 0 && (
+            <p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-900">
+              {formatAmount(c360.unappliedCredit)} has been received but not matched to an invoice. It is shown on its own
+              and deducted only in the net balance; ageing bands show invoice amounts only.
+            </p>
+          )}
+        </section>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="rounded-xl bg-white p-6 shadow-sm lg:col-span-2">
@@ -433,48 +497,122 @@ export default async function CustomerPage({
         </section>
 
         <section className="mt-6 rounded-xl bg-white shadow-sm">
-          <div className="flex items-center justify-between">
-  <h2 className="text-lg font-semibold">Notes & follow-ups</h2>
-<Link
-  href={`/customers/${customer.id}/notes?asof=${asof}`}
-  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
->
-  Add / View Notes
-</Link>
-
-  
-</div>
-
-          <div className="divide-y">
-            {notes.map((note) => (
-              <div
-                key={note.id}
-                className="px-6 py-4"
-              >
-                <div className="flex justify-between">
-                  <span className="font-medium">
-                    {formatDate(note.noteDate)}
-                  </span>
-
-                  <span className="text-sm text-slate-500">
-                    {note.noteType}
-                  </span>
-                </div>
-
-                <p className="mt-2 text-sm text-slate-700">
-                  {note.body}
-                </p>
-              </div>
-            ))}
-
-            {notes.length === 0 && (
-              <p className="px-6 py-6 text-sm text-slate-500">
-                No notes as at this date.
-              </p>
-            )}
+          <div className="flex items-center justify-between border-b px-6 py-4">
+            <h2 className="font-semibold">Collection activity</h2>
+            <Link
+              href={`/customers/${customer.id}/notes?asof=${asof}`}
+              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+            >
+              Add note / mark follow-up done
+            </Link>
           </div>
+          {c360.activity.length === 0 ? (
+            <p className="px-6 py-6 text-sm text-slate-500">No notes on or before this date.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-slate-600">
+                  <tr>
+                    <th className="px-4 py-2">Date</th>
+                    <th className="px-4 py-2">Type</th>
+                    <th className="px-4 py-2">Invoice</th>
+                    <th className="px-4 py-2">Note</th>
+                    <th className="px-4 py-2">Promise to pay</th>
+                    <th className="px-4 py-2">Follow-up</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {c360.activity.map(({ note, invoiceNo, promiseStatus, followUpState }) => (
+                    <tr key={note.id} className="align-top">
+                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(note.noteDate)}</td>
+                      <td className="px-4 py-3">{note.noteType}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {invoiceNo && note.invoiceId ? (
+                          <Link href={`/invoices/${note.invoiceId}?asof=${asof}`} className="text-blue-700 hover:underline">
+                            {invoiceNo}
+                          </Link>
+                        ) : (
+                          <span className="text-slate-400">Account</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{note.body}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {promiseStatus ? (
+                          <>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                promiseStatus === "Broken"
+                                  ? "bg-red-100 text-red-800"
+                                  : promiseStatus === "Kept"
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-blue-100 text-blue-800"
+                              }`}
+                            >
+                              {promiseStatus}
+                            </span>
+                            <div className="mt-1 text-xs text-slate-500">
+                              {formatAmount(note.promiseAmount ?? 0)} by {formatDate(note.promiseDate!)}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {followUpState ? (
+                          <span
+                            className={
+                              followUpState === "Due"
+                                ? "font-medium text-amber-800"
+                                : followUpState === "Done"
+                                  ? "text-slate-400 line-through"
+                                  : "text-slate-600"
+                            }
+                          >
+                            {followUpState} · {formatDate(note.followUpDate!)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
     </main>
+  );
+}
+
+function Fact({
+  label,
+  value,
+  href,
+  tone,
+  strong,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+  tone?: "red" | "amber";
+  strong?: boolean;
+}) {
+  const color = tone === "red" ? "text-red-700" : tone === "amber" ? "text-amber-700" : "";
+  return (
+    <div>
+      <dt className="text-xs text-slate-500">{label}</dt>
+      <dd className={`mt-0.5 tabular-nums ${strong ? "font-semibold" : "font-medium"} ${color}`}>
+        {href ? (
+          <Link href={href} className="hover:underline">
+            {value}
+          </Link>
+        ) : (
+          value
+        )}
+      </dd>
+    </div>
   );
 }

@@ -46,7 +46,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <section className="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <h2 className="text-lg font-semibold">Ageing by customer</h2>
-          <span className="text-xs text-slate-500">Days past due from the due date · click a row for its invoices</span>
+          <span className="text-xs text-slate-500">Days past due from the due date · click an amount for its invoices</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -79,7 +79,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                     </td>
                     {AGEING_BUCKETS.map((b) => (
                       <td key={b} className={`px-3 py-2.5 text-right tabular-nums ${p.ageing[b] === 0 ? "text-slate-300" : ""}`}>
-                        {formatAmount(p.ageing[b])}
+                        {p.ageing[b] === 0 ? (
+                          formatAmount(0)
+                        ) : (
+                          <Link
+                            href={`/collections?${q}&customer=${c.id}&bucket=${encodeURIComponent(b)}&show=all`}
+                            className="hover:underline"
+                            title={`${c.code} invoices in ${b}`}
+                          >
+                            {formatAmount(p.ageing[b])}
+                          </Link>
+                        )}
                       </td>
                     ))}
                     <td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatAmount(p.outstanding)}</td>
@@ -94,7 +104,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                 <td className="px-3 py-3">Total</td>
                 {AGEING_BUCKETS.map((b) => (
                   <td key={b} className="px-3 py-3 text-right tabular-nums">
-                    {formatAmount(summary.ageing[b])}
+                    <Link href={`/collections?${q}&bucket=${encodeURIComponent(b)}&show=all`} className="hover:underline">
+                      {formatAmount(summary.ageing[b])}
+                    </Link>
                   </td>
                 ))}
                 <td className="px-3 py-3 text-right tabular-nums">{formatAmount(summary.totalOutstanding)}</td>

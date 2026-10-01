@@ -132,3 +132,37 @@ Use date **01-Oct-2026**.
 | K1 | `npm test` | All tests pass, including the R14 check for every day from 01-Jan to 31-Oct-2026. |
 | K2 | Statement closing balance for any customer and date | Equals the customer's net balance on the customer page for that date. |
 | K3 | Dashboard at 31-Aug-2026 | DSO 111 days. At a date before the first invoice (e.g. 01-Jan-2025) DSO shows "—". |
+
+## L. Collections workbench (as at 31-Aug-2026 unless stated)
+
+| # | Do | Expect |
+|---|---|---|
+| L1 | Click **Collections** in the menu | KPIs: Total receivables ₹21,18,100.00 · Overdue ₹12,86,200.00 (61%) · Unapplied ₹1,00,000.00 · Net ₹20,18,100.00 Dr · Over limit 1 · Near limit 1 · Broken promises 1 · Follow-ups due 0 · DSO 111 days (same as the dashboard). |
+| L2 | Worklist chips | Critical · 5, High · 3, Normal · 4 (12 invoices). Top row BWA/25-26/0141 (C003, 193 days, Critical). |
+| L3 | BWA/26-27/0003 row | **Critical**; promise **Broken** (01-Aug-2026); reasons "Promise to pay broken · 90 days overdue (46–90) · Part-paid"; band 46-90. |
+| L4 | C003 rows | All four Critical, credit status **Over Limit**, promise Pending (30-Sep-2026, the account-level note). |
+| L5 | BWA/26-27/0010 | **High**: "Disputed and overdue"; Disputed label. |
+| L6 | BWA/26-27/0017 and 0022 (Sabarmati) | Full outstanding shown (₹1,18,000.00 / ₹70,800.00); reason "Customer has unapplied credit to allocate". 0022 is listed although not due. |
+| L7 | Click the **46-90** ageing band | 3 invoices: 0003, 0009, 0007. "Clear band" removes the filter. |
+| L8 | Click **Not due** | Switches to all open invoices in that band: 5 invoices. |
+| L9 | Click the **Broken promises** KPI | Only BWA/26-27/0003. |
+| L10 | Click **Near limit** | C007's BWA/26-27/0015 (Normal, 15 days overdue, Near Limit). Choose **All open invoices** + Apply: 0023 (not due) appears too. |
+| L11 | Sort: largest outstanding | BWA/26-27/0015 (₹4,72,000.00) first. Sort: longest overdue: 0141 first. |
+| L12 | Credit exposure table | C005: outstanding ₹1,88,800.00 · **unapplied ₹1,00,000.00** · net ₹88,800.00 Dr · 36% · Within Limit. C003 112% Over Limit, C007 91% Near Limit. C008 (nothing open) not listed. |
+| L13 | Unapplied receipts panel | RCT/26-27/0011, Sabarmati, ₹1,00,000.00, with an **Allocate** link (the receipt page explains it is allocated by a 05-Sep allocation). |
+| L14 | Change the date to **15-Sep-2026** | Follow-ups due KPI 4; filter "Follow-up due" shows the invoices with "Due 01-Sep / 05-Sep / 10-Sep / 15-Sep"; 0020 (C006) becomes **High**; C007 is now Within Limit; unapplied 0. |
+| L15 | Customers → C006 → notes → mark the 01-Sep follow-up done → back to Collections (15-Sep) | 0020 drops from High to Normal; Follow-ups due KPI 3. |
+| L16 | Date **12-Jul-2026** | No Sabarmati invoices on the worklist; exposure shows C005 net ₹1,00,000.00 Cr, Within Limit. |
+| L17 | **Export worklist CSV** with "Broken" promise filter | `Collections_2026-08-31.csv` with one row: C002, BWA/26-27/0003, 69600.00, 46-90, 90, No, Broken, Within Limit, Critical, reasons. |
+| L18 | Dashboard → click an amount in the ageing table (e.g. C002 / 46-90) | Collections opens filtered to that customer and band. |
+
+## M. Customer 360 and collection activity
+
+| # | Do | Expect |
+|---|---|---|
+| M1 | Open C002 (31-Aug) → Collection summary | Credit limit ₹3,00,000.00 · Net ₹2,23,000.00 Dr · Overdue ₹1,64,000.00 · Not yet due ₹59,000.00 · Unapplied ₹0.00 · 74% used, Within Limit · Open/overdue 3 / 2 · Oldest overdue BWA/26-27/0003 · 90 days · Promises broken/pending 1 / 0 · Last receipt 15-Jun-2026 · ₹72,000.00. |
+| M2 | Click each link in the summary | Overdue invoices list for C002; invoice 0003; notes page; receipt RCT/26-27/0007; Collections filtered to C002. |
+| M3 | C002 collection activity | 20-Jul-2026 · Call · BWA/26-27/0003 · promise **Broken** "₹69,600.00 by 01-Aug-2026". |
+| M4 | Open C005 (31-Aug) | Gross outstanding ₹1,88,800.00, **Unapplied credit held ₹1,00,000.00**, net ₹88,800.00 Dr, 36%; the amber note explains the advance is not in the ageing bands. |
+| M5 | Open C004 at **07-Sep-2026** | Activity: 20-Aug (0007) follow-up **Due · 05-Sep-2026**; 26-Jul (0010) follow-up **Upcoming · 10-Sep-2026**; Follow-ups due 1. |
+| M6 | Open C003 (31-Aug) | Credit status **Over Limit · 112%**; activity shows the 10-Aug account-level note ("Account") with promise Pending ₹2,34,200.00 by 30-Sep-2026. |

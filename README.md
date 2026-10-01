@@ -12,6 +12,7 @@ Every figure is calculated from the six source tables at a chosen **as-at date**
 | **Customer Master** | `/customers`, `/customers/new`, `/customers/[id]`, `/customers/[id]/edit`, `/customers/[id]/notes` | Search (code, name, contact, email), active/inactive filter, **sort by any column** · add / edit with validation · deactivate / reactivate · customer page with balance, ageing, over-limit warning, invoices, receipts and unapplied credit, notes timeline, quick actions |
 | **Invoices** | `/invoices`, `/invoices/new`, `/invoices/[id]` | Filters: invoice number, customer, status (incl. **Cancelled**), disputed, date range · **sort by any column** (click again to reverse) · totals row (cancelled excluded) · CSV of the filtered list · create with live preview of number, due date, GST split and total, and a **non-blocking credit-limit warning** · credit note, disputed flag, cancel |
 | **Receipts** | `/receipts`, `/receipts/new`, `/receipts/[id]/allocate` | Record a payment: TDS **pre-filled** (editable), open invoices with an **oldest-first suggestion** you can change, unapplied amount shown · receipt + allocations saved together · allocate unapplied credit later · **remove an allocation** · **delete a receipt** with no allocations |
+| **Collections** | `/collections`; summary + activity on each customer page | The analyst's morning worklist: KPIs, ageing bands that filter, a prioritised (Critical / High / Normal) invoice worklist with reasons, credit exposure by customer, unapplied receipts to allocate, CSV. See [Additional features](#additional-features--ar-analyst--collections-workbench). |
 | **Statement** | `/statement` (in the main menu) | Pick customer and period · opening balance, debits/credits, TDS as its own line, running balance, closing balance (Dr/Cr) · **footer: closing balance by ageing band + unapplied credit** · A4 print · CSV |
 
 ## Tech stack
@@ -39,6 +40,7 @@ Browser ──► Next.js (server components + server actions) ──► Supabas
 | `payments.ts` | Open invoices, TDS pre-fill, oldest-first suggestion, R6 allocation checks, receipt-delete rule |
 | `lists.ts` | Invoice / customer / receipt lists: rows, filters, sorting, totals |
 | `attention.ts` | Dashboard summary, overdue list, Needs attention, credit-limit check |
+| `collections.ts` | Collections workbench: credit status, attention rules, worklist, filters, KPIs, Customer 360, CSV rows |
 | `format.ts` | ₹ with Indian grouping, `31-Aug-2026` dates, Dr/Cr |
 
 **Saving data.** Every form submits to a server action that validates with zod, checks the business rules with `lib/ar` (so the user gets a plain-language reason before the database is involved), writes, then revalidates. If the database still rejects a write, its message is shown.
@@ -80,7 +82,7 @@ The fixture (`tests/fixtures/sample.json`) is the sample data saved once, with `
 
 ## Tests
 
-161 Vitest tests in `tests/`, all against the sample-data fixture:
+207 Vitest tests in `tests/`, all against the sample-data fixture:
 
 - every published spot check (with spot check 3's bucket under the new bands, see below);
 - `balanceCheck` is empty **for every day** from 2026-01-01 to 2026-10-31, and ageing buckets add up to outstanding for every customer on every one of those days;
@@ -93,7 +95,8 @@ The fixture (`tests/fixtures/sample.json`) is the sample data saved once, with `
 - credit-limit warning: below, exactly at, above, with unapplied credit;
 - payments: TDS pre-fill reproduces the real sample receipts (e.g. ₹5,72,400 → ₹53,000), oldest-first suggestion, every R6 check, delete only without allocations;
 - Tamhini terms change: existing due dates unchanged, new invoices at 45 days;
-- formatting, CSV quoting and BOM, statement period defaults.
+- formatting, CSV quoting and BOM, statement period defaults;
+- the collections module: attention and credit-status boundaries, every worklist filter, sort orders, as-at behaviour, KPIs against the engine, Customer 360 figures and the CSV rows (`tests/collections.test.ts`).
 
 The click-through checks are in [`docs/TESTING.md`](docs/TESTING.md).
 
@@ -157,3 +160,73 @@ Every page reads `?asof=YYYY-MM-DD` (`lib/asof.ts`). If missing or invalid, it i
 ## Deployment
 
 Deployed on Vercel from the `master` branch; each push deploys. In Vercel → Settings → Environment Variables, set `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `AR_WORKSPACE_ID`, then redeploy (variables only apply to new deployments). Live site: https://ar-manager-ca-it.vercel.app
+
+## Additional features — AR Analyst / Collections Workbench
+
+### What was added
+
+| Where | What |
+|---|---|
+| **`/collections`** (menu: Collections) | KPI strip · ageing bands you click to filter · the **worklist** of invoices needing action, each with an **Attention** level and the reasons · **credit exposure** by customer (gross outstanding, unapplied credit, net balance, limit, % used, credit status) · **unapplied receipts** with an Allocate link · **CSV** of the filtered worklist |
+| **Customer page** | A **Collection summary** (Customer 360) block and a **Collection activity** timeline of notes with promise and follow-up status |
+| **Dashboard** | Ageing amounts link straight into the worklist for that customer and band |
+
+All of it is computed in `lib/ar/collections.ts`, which only *combines* existing engine results (R11 invoice position, ageing, R13 customer position, R16 promises and follow-ups, R17 DSO). It introduces **no new financial figure**. The two new things it introduces are workflow labels, whose rules are exact and listed below.
+
+### Why it helps
+
+It answers the morning questions in one place: who owes us money (KPIs, exposure table); how much is overdue and for how long (KPIs, bands, *Days late*); who is over or near their limit (credit status); who promised and didn't pay (*Broken* promises); which follow-ups are due; which receipts are waiting to be allocated; and which invoices to work first (the worklist, sorted by Attention).
+
+### Inspired by (concepts only)
+
+Oracle Fusion Receivables / Advanced Collections ideas: a *collections workbench*, *delinquent transactions*, *aging*, *promise to pay* with kept/broken tracking, *collector follow-ups (tasks)*, *credit exposure*, *unapplied receipts* and a *customer account overview*. No Oracle screens, scoring models or terminology beyond these generic concepts were copied.
+
+### Exact rules
+
+**Credit status**, a workflow indicator and **not** a credit-risk score or credit assessment. It uses the R13 net balance (invoice outstanding − unapplied credit), compared in whole paise:
+
+| Status | Rule |
+|---|---|
+| Over Limit | net balance **>** credit limit (the R13 over-limit rule) |
+| Near Limit | not over, and net balance **≥ 80%** of the limit |
+| Within Limit | everything else, including credit (Cr) balances |
+
+**Which notes apply to an invoice:** a note recorded against an invoice applies to that invoice; a note with no invoice is about the account and applies to all the customer's invoices. The invoice's *promise* is the latest such note with a promise (by note date), with its R16 status as at D; its *follow-up* is the earliest such open follow-up dated on or before D.
+
+**Attention**, a workflow priority and **not** an accounting figure. The highest matching level wins, and every matching reason is shown.
+
+| Level | An open invoice (outstanding > 0, as at D) is this level when |
+|---|---|
+| **Critical** | it is **overdue** and: more than **90** days past due; **or** its promise to pay is **broken**; **or** the customer is **Over Limit** |
+| **High** | overdue **46–90** days; **or** a **follow-up is due**; **or** it is **disputed and overdue** |
+| **Normal** | overdue **1–45** days; **or** **part-paid**; **or** disputed (not overdue); **or** a promise is **pending** (or broken on an invoice not yet overdue); **or** the customer holds **unapplied credit** (allocate before chasing) |
+| *(not listed)* | not due and none of the above. Choose "All open invoices" to see these too |
+
+The worklist is sorted by Attention, then days past due (longest first), then outstanding (largest first), then invoice number. It can also be sorted by largest outstanding or longest overdue.
+
+Sabarmati at 31-Aug-2026: its invoices show at their full outstanding (BWA/26-27/0017 ₹1,18,000), with the reason *"Customer has unapplied credit to allocate"*. The exposure table shows ₹1,88,800 gross, **₹1,00,000 unapplied** and ₹88,800 Dr net, 36% used, Within Limit. The advance is never folded into an ageing band.
+
+### How to use it
+
+1. Open **Collections**. The date picker drives everything (R10).
+2. Read the KPIs. Click *Over limit*, *Near limit*, *Broken promises* or *Follow-ups due* to filter the worklist.
+3. Work the list from the top. Click the Critical / High / Normal chips, an ageing band, or use the filters (customer, band, due/overdue, disputed, promise, follow-up, credit status), then **Apply**.
+4. Click an invoice or customer to drill in. Follow-up links go to the customer's notes, where follow-ups are marked done.
+5. Allocate waiting money from *Unapplied receipts*.
+6. **Export worklist CSV** downloads exactly what is on screen.
+
+### Assumptions
+
+- "Near limit" is 80% of the limit or more, measured on net balance like the over-limit rule.
+- An account-level note (no invoice) applies to every invoice of that customer. For example, C003's promise covers all four of its open invoices.
+- "High-value" is shown by sorting on outstanding, not by a fixed rupee threshold, so no arbitrary figure is introduced.
+
+### Limits imposed by the fixed schema
+
+- No collector / owner, task, dunning-level or contact-history tables, so there is no assignment of work to collectors and no reminder letters. Notes (type, follow-up date, done flag, promise date and amount) carry all collection activity.
+- A promise covers either one invoice or the whole account; it cannot name several specific invoices.
+- Follow-ups can be marked done but not rescheduled; add a new note with a new date instead.
+
+### Deliberately not added
+
+Credit scoring or risk grades; automatic emails or dunning letters (out of scope per Part 2); write-offs and provisioning (out of scope); collector assignment; charts. Each would either need data the schema does not have or add complexity without helping the morning worklist.
