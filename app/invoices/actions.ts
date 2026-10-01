@@ -4,135 +4,102 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { supabase } from "@/lib/db";
 import { loadArData } from "@/lib/ar/load";
-import { addDays } from "@/lib/ar/date";
+import { draftInvoice, isDuplicateNumberError, type InvoiceDraft } from "@/lib/ar/drafts";
 
 const schema = z.object({
-  customerId: z.coerce.number().int().positive(),
-  invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  description: z.string().trim().min(1),
-  taxableValue: z.coerce.number().min(0),
-  gstRate: z.coerce.number().refine(
-    (value) => value === 18,
-    "GST rate must be 18%",
-  ),
+  customerId: z.coerce.number().int().positive("Choose a customer."),
+  invoiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid invoice date."),
+  description: z.string().trim().min(1, "Enter a description.").max(500),
+  taxableValue: z.coerce
+    .number()
+    .positive("The taxable value must be more than zero.")
+    .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, "Use at most 2 decimals."),
+  gstRate: z.coerce.number().min(0, "GST rate cannot be negative.").max(100, "GST rate cannot exceed 100%."),
+  /** Set once the user has seen the credit-limit warning and chose to go ahead. */
+  acknowledgeLimit: z.boolean().optional(),
 });
 
-function financialYear(date: string): string {
-  const [year, month] = date.split("-").map(Number);
+export type InvoicePreview =
+  | { ok: true; draft: InvoiceDraft }
+  | { ok: false; error: string };
 
-  if (month >= 4) {
-    return `${String(year).slice(-2)}-${String(year + 1).slice(-2)}`;
+/** Live preview for the form: number, due date, GST, total, credit-limit warning. */
+export async function previewInvoice(input: {
+  customerId: number;
+  invoiceDate: string;
+  taxableValue: number;
+  gstRate: number;
+}): Promise<InvoicePreview> {
+  if (!input.customerId || !/^\d{4}-\d{2}-\d{2}$/.test(input.invoiceDate)) {
+    return { ok: false, error: "" };
   }
-
-  return `${String(year - 1).slice(-2)}-${String(year).slice(-2)}`;
+  const data = await loadArData();
+  const draft = draftInvoice(data, {
+    customerId: input.customerId,
+    invoiceDate: input.invoiceDate,
+    taxable: Math.round((Number(input.taxableValue) || 0) * 100),
+    gstRatePct: Number(input.gstRate) || 0,
+  });
+  return { ok: true, draft };
 }
 
-export async function createInvoice(formData: FormData) {
-  const parsed = schema.safeParse({
-    customerId: formData.get("customerId"),
-    invoiceDate: formData.get("invoiceDate"),
-    description: formData.get("description"),
-    taxableValue: formData.get("taxableValue"),
-    gstRate: formData.get("gstRate"),
-  });
+export type CreateInvoiceResult =
+  | { success: true; invoiceId: number; invoiceNo: string }
+  | { success: false; error: string }
+  | { success: false; needsConfirmation: true; draft: InvoiceDraft };
 
+export async function createInvoice(input: z.input<typeof schema>): Promise<CreateInvoiceResult> {
+  const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    return {
-      success: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid invoice details",
-    };
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Please check the invoice details." };
   }
-
   const values = parsed.data;
-  const data = await loadArData();
-
-  const customer = data.customers.find(
-    (item) => item.id === values.customerId,
-  );
-
-  if (!customer) {
-    return {
-      success: false,
-      error: "Customer not found",
-    };
-  }
-
-  if (!customer.isActive) {
-    return {
-      success: false,
-      error: "Inactive customers cannot receive new invoices",
-    };
-  }
-
-  const taxablePaise = Math.round(values.taxableValue * 100);
-
-  const gstPaise = Math.round(
-    (taxablePaise * 18) / 100,
-  );
-
-  let cgstPaise = 0;
-  let sgstPaise = 0;
-  let igstPaise = 0;
-
-  if (customer.state?.toLowerCase() === "maharashtra") {
-    cgstPaise = Math.round(gstPaise / 2);
-    sgstPaise = gstPaise - cgstPaise;
-  } else {
-    igstPaise = gstPaise;
-  }
-
-  const totalPaise =
-    taxablePaise +
-    cgstPaise +
-    sgstPaise +
-    igstPaise;
-
-  const fy = financialYear(values.invoiceDate);
-  const prefix = `BWA/${fy}/`;
-
-  const nextNumber =
-    data.invoices
-      .filter((invoice) => invoice.invoiceNo.startsWith(prefix))
-      .reduce((max, invoice) => {
-        const match = invoice.invoiceNo.match(/(\d+)$/);
-        return Math.max(max, match ? Number(match[1]) : 0);
-      }, 0) + 1;
-
-  const invoiceNo = `${prefix}${String(nextNumber).padStart(4, "0")}`;
-
-  const dueDate = addDays(
-    values.invoiceDate,
-    customer.creditDays,
-  );
-
-  const { error } = await supabase.from("invoices").insert({
-    customer_id: customer.id,
-    invoice_no: invoiceNo,
-    invoice_date: values.invoiceDate,
-    due_date: dueDate,
-    description: values.description,
-    taxable_value: taxablePaise / 100,
-    gst_rate_pct: 18,
-    cgst: cgstPaise / 100,
-    sgst: sgstPaise / 100,
-    igst: igstPaise / 100,
-    total: totalPaise / 100,
-    is_cancelled: false,
-    is_disputed: false,
-  });
-
-  if (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-
-  revalidatePath("/invoices");
-  revalidatePath("/");
-
-  return {
-    success: true,
-    invoiceNo,
+  const draftInput = {
+    customerId: values.customerId,
+    invoiceDate: values.invoiceDate,
+    taxable: Math.round(values.taxableValue * 100),
+    gstRatePct: values.gstRate,
   };
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const data = await loadArData();
+    const draft = draftInvoice(data, draftInput);
+    if (draft.errors.length > 0) return { success: false, error: draft.errors.join(" ") };
+
+    // R9: warn, never block. The first save over the limit returns the
+    // warning; saving again with acknowledgeLimit goes ahead.
+    if (draft.creditLimit?.exceedsLimit && !values.acknowledgeLimit) {
+      return { success: false, needsConfirmation: true, draft };
+    }
+
+    const { data: row, error } = await supabase
+      .from("invoices")
+      .insert({
+        customer_id: values.customerId,
+        invoice_no: draft.invoiceNo,
+        invoice_date: values.invoiceDate,
+        due_date: draft.dueDate,
+        description: values.description,
+        taxable_value: draftInput.taxable / 100,
+        gst_rate_pct: values.gstRate,
+        cgst: draft.gst.cgst / 100,
+        sgst: draft.gst.sgst / 100,
+        igst: draft.gst.igst / 100,
+        total: draft.total / 100,
+        is_cancelled: false,
+        is_disputed: false,
+      })
+      .select("id")
+      .single();
+
+    if (row) {
+      revalidatePath("/", "layout");
+      return { success: true, invoiceId: row.id, invoiceNo: draft.invoiceNo };
+    }
+    // Another tab took this number: work it out again and retry once (README 4.8).
+    if (!isDuplicateNumberError(error?.message) || attempt === 1) {
+      return { success: false, error: error?.message ?? "The invoice could not be saved." };
+    }
+  }
+  return { success: false, error: "The invoice could not be saved." };
 }

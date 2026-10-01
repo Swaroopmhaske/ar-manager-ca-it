@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { loadArData } from "@/lib/ar/load";
 import { getAsOf } from "@/lib/asof";
+import { receiptListRows } from "@/lib/ar/lists";
 import {
   AGEING_BUCKETS,
   customerPosition,
@@ -9,7 +10,7 @@ import {
 } from "@/lib/ar/calculations";
 import {
   formatAmount,
-  formatBalance,
+  formatDrCr,
   formatDate,
 } from "@/lib/ar/format";
 
@@ -72,10 +73,8 @@ export default async function CustomerPage({
       ),
     }));
 
-  const receipts = data.receipts.filter(
-    (receipt) =>
-      receipt.customerId === customer.id &&
-      receipt.receiptDate <= asof
+  const receipts = receiptListRows(data, asof).filter(
+    (row) => row.receipt.customerId === customer.id
   );
 
   const notes = data.notes
@@ -115,39 +114,59 @@ export default async function CustomerPage({
               </p>
             </div>
 
-            <Link
-              href={`/customers/${customer.id}/edit?asof=${asof}`}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-            >
-              Edit customer<form
-  action={async () => {
-    "use server";
-
-    const { setCustomerActive } = await import(
-      "@/app/customers/actions/customer-actions"
-    );
-
-    await setCustomerActive(customer.id, !customer.isActive);
-  }}
->
-  <button
-    type="submit"
-    className={`rounded-lg px-4 py-2 text-sm font-medium ${
-      customer.isActive
-        ? "border border-red-300 text-red-700 hover:bg-red-50"
-        : "bg-green-600 text-white hover:bg-green-700"
-    }`}
-  >
-    {customer.isActive ? "Deactivate" : "Reactivate"}
-  </button>
-</form>
-            </Link>
+            <div className="flex flex-wrap justify-end gap-2">
+              {customer.isActive && (
+                <Link
+                  href={`/invoices/new?asof=${asof}&customer=${customer.id}`}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+                >
+                  New invoice
+                </Link>
+              )}
+              <Link
+                href={`/receipts/new?asof=${asof}&customer=${customer.id}`}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                Record payment
+              </Link>
+              <Link
+                href={`/statement?customer=${customer.id}&asof=${asof}`}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+              >
+                Statement
+              </Link>
+              <Link
+                href={`/customers/${customer.id}/edit?asof=${asof}`}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+              >
+                Edit customer
+              </Link>
+              <form
+                action={async () => {
+                  "use server";
+                  const { setCustomerActive } = await import("@/app/customers/actions/customer-actions");
+                  await setCustomerActive(customer.id, !customer.isActive);
+                }}
+              >
+                <button
+                  type="submit"
+                  className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                    customer.isActive
+                      ? "border border-red-300 text-red-700 hover:bg-red-50"
+                      : "bg-green-600 text-white hover:bg-green-700"
+                  }`}
+                >
+                  {customer.isActive ? "Deactivate" : "Reactivate"}
+                </button>
+              </form>
+            </div>
           </div>
         </div>
 
         {position.overLimit && (
           <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-            This customer is over the credit limit.
+            Over the credit limit: net balance {formatDrCr(position.netBalance)} against a limit of{" "}
+            {formatAmount(customer.creditLimit)}.
           </div>
         )}
 
@@ -158,12 +177,7 @@ export default async function CustomerPage({
             </p>
 
             <p className="mt-2 text-xl font-semibold">
-              {formatBalance(
-                Math.abs(position.netBalance),
-                position.netBalance >= 0
-                  ? "Dr"
-                  : "Cr"
-              )}
+              {formatDrCr(position.netBalance)}
             </p>
           </div>
 
@@ -359,78 +373,63 @@ export default async function CustomerPage({
         </section>
 
         <section className="mt-6 rounded-xl bg-white shadow-sm">
-          <div className="border-b px-6 py-4">
-            <h2 className="font-semibold">
-              Receipts
-            </h2>
+          <div className="flex items-center justify-between border-b px-6 py-4">
+            <h2 className="font-semibold">Receipts</h2>
+            {position.unappliedCredit > 0 && (
+              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
+                {formatAmount(position.unappliedCredit)} unapplied credit to allocate
+              </span>
+            )}
           </div>
-
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-slate-600">
                 <tr>
-                  <th className="px-6 py-3">
-                    Date
-                  </th>
-                  <th className="px-6 py-3">
-                    Mode
-                  </th>
-                  <th className="px-6 py-3">
-                    Reference
-                  </th>
-                  <th className="px-6 py-3 text-right">
-                    Bank
-                  </th>
-                  <th className="px-6 py-3 text-right">
-                    TDS
-                  </th>
+                  <th className="px-6 py-3">Receipt</th>
+                  <th className="px-6 py-3">Date</th>
+                  <th className="px-6 py-3">Mode / reference</th>
+                  <th className="px-6 py-3 text-right">Bank</th>
+                  <th className="px-6 py-3 text-right">TDS</th>
+                  <th className="px-6 py-3 text-right">Settlement</th>
+                  <th className="px-6 py-3 text-right">Unapplied</th>
+                  <th className="px-6 py-3 text-right" />
                 </tr>
               </thead>
-
               <tbody className="divide-y">
-                {receipts.map((receipt) => (
-                  <tr key={receipt.id}>
+                {receipts.map((r) => (
+                  <tr key={r.receipt.id}>
+                    <td className="px-6 py-3 font-medium">{r.receipt.receiptNo}</td>
+                    <td className="px-6 py-3">{formatDate(r.receipt.receiptDate)}</td>
                     <td className="px-6 py-3">
-                      {formatDate(
-                        receipt.receiptDate
-                      )}
+                      {r.receipt.mode}
+                      {r.receipt.reference ? ` · ${r.receipt.reference}` : ""}
                     </td>
-
-                    <td className="px-6 py-3">
-                      {receipt.mode}
+                    <td className="px-6 py-3 text-right tabular-nums">{formatAmount(r.receipt.bankAmount)}</td>
+                    <td className="px-6 py-3 text-right tabular-nums">{formatAmount(r.receipt.tdsAmount)}</td>
+                    <td className="px-6 py-3 text-right tabular-nums">{formatAmount(r.settlement)}</td>
+                    <td className={`px-6 py-3 text-right tabular-nums ${r.unapplied > 0 ? "font-semibold text-amber-700" : ""}`}>
+                      {formatAmount(r.unapplied)}
                     </td>
-
-                    <td className="px-6 py-3">
-                      {receipt.reference}
-                    </td>
-
                     <td className="px-6 py-3 text-right">
-                      {formatAmount(
-                        receipt.bankAmount
-                      )}
-                    </td>
-
-                    <td className="px-6 py-3 text-right">
-                      {formatAmount(
-                        receipt.tdsAmount
-                      )}
+                      <Link
+                        href={`/receipts/${r.receipt.id}/allocate?asof=${asof}`}
+                        className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                      >
+                        {r.unapplied > 0 ? "Allocate credit" : "View / correct"}
+                      </Link>
                     </td>
                   </tr>
                 ))}
+                {receipts.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-6 text-center text-slate-500">
+                      No receipts on or before this date.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
-
-          {position.unappliedCredit > 0 && (
-            <div className="border-t px-6 py-4 text-sm">
-              <span className="font-medium">
-                Unapplied credit:
-              </span>{" "}
-              {formatAmount(
-                position.unappliedCredit
-              )}
-            </div>
-          )}
         </section>
 
         <section className="mt-6 rounded-xl bg-white shadow-sm">
@@ -441,12 +440,6 @@ export default async function CustomerPage({
   className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
 >
   Add / View Notes
-</Link>
-<Link
-  href={`/statement?customer=${customer.id}&from=2026-04-01&to=${asof}`}
-  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
->
-  Statement
 </Link>
 
   

@@ -1,267 +1,223 @@
 "use server";
-import { loadArData } from "@/lib/ar/load";
-import { z } from "zod";
-import { revalidatePath } from "next/cache";
-import { supabase, AR_WORKSPACE_ID } from "@/lib/db";
 
-const receiptSchema = z.object({
-  customerId: z.number().int().positive(),
-  receiptDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  bankAmount: z.number().nonnegative(),
-  tdsAmount: z.number().nonnegative(),
-  mode: z.enum(["NEFT", "RTGS", "IMPS", "UPI", "Cheque"]),
-  reference: z.string().max(200).nullable(),
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { supabase } from "@/lib/db";
+import { loadArData } from "@/lib/ar/load";
+import { nextNumber } from "@/lib/ar/documents";
+import { isDuplicateNumberError } from "@/lib/ar/drafts";
+import {
+  canDeleteReceipt,
+  receiptAvailable,
+  validateAllocations,
+} from "@/lib/ar/payments";
+
+export type ActionResult =
+  | { success: true; message?: string; receiptNo?: string }
+  | { success: false; error: string };
+
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.");
+/** Rupees from the form → whole paise. Rejects more than 2 decimals. */
+const paise = z
+  .number()
+  .nonnegative("Amounts cannot be negative.")
+  .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, "Use at most 2 decimals.")
+  .transform((v) => Math.round(v * 100));
+
+const lineSchema = z.object({
+  invoiceId: z.number().int().positive(),
+  amount: paise,
 });
 
-function financialYear(date: string): string {
-  const [year, month] = date.split("-").map(Number);
+const receiptSchema = z.object({
+  customerId: z.number().int().positive("Choose a customer."),
+  receiptDate: date,
+  bankAmount: paise,
+  tdsAmount: paise,
+  mode: z.enum(["NEFT", "RTGS", "IMPS", "UPI", "Cheque"]),
+  reference: z.string().trim().max(200).nullable(),
+  allocations: z.array(lineSchema),
+});
 
-  if (month >= 4) {
-    return `${String(year).slice(-2)}-${String(year + 1).slice(-2)}`;
-  }
-
-  return `${String(year - 1).slice(-2)}-${String(year).slice(-2)}`;
+function refresh() {
+  revalidatePath("/", "layout");
 }
 
-export async function createReceipt(input: {
-  customerId: number;
-  receiptDate: string;
-  bankAmount: number;
-  tdsAmount: number;
-  mode: "NEFT" | "RTGS" | "IMPS" | "UPI" | "Cheque";
-  reference: string | null;
-}) {
+const rupees = (p: number) => (p / 100).toFixed(2);
+
+/**
+ * Record a payment (Part 2, Action 1; README 4.8).
+ *
+ * The API has no transactions, so "saved together" works like this, all on
+ * the server: check everything first; insert the receipt and get its id;
+ * insert ALL allocations in one request (one statement, so they succeed or
+ * fail together); if that fails, delete the receipt just created, so
+ * nothing is left behind, and report the database's reason.
+ */
+export async function createReceiptWithAllocations(
+  input: z.input<typeof receiptSchema>
+): Promise<ActionResult> {
   const parsed = receiptSchema.safeParse(input);
-
   if (!parsed.success) {
-    return {
-      success: false,
-      error: "Please enter valid receipt details.",
-    };
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Please check the receipt details." };
   }
-
   const values = parsed.data;
-
-  if (values.bankAmount === 0 && values.tdsAmount === 0) {
-    return {
-      success: false,
-      error: "Receipt amount cannot be zero.",
-    };
-  }
-
-  const { data: customer, error: customerError } = await supabase
-    .from("customers")
-    .select("id,is_active")
-    .eq("id", values.customerId)
-    .eq("workspace_id", AR_WORKSPACE_ID)
-    .single();
-
-  if (customerError || !customer) {
-    return {
-      success: false,
-      error: "Customer not found.",
-    };
-  }
-
-  if (!customer.is_active) {
-    return {
-      success: false,
-      error: "Cannot record a receipt for an inactive customer.",
-    };
-  }
-
-  const fy = financialYear(values.receiptDate);
-  const prefix = `RCT/${fy}/`;
-
-  const { data: existingReceipts, error: receiptsError } = await supabase
-    .from("receipts")
-    .select("receipt_no")
-    .eq("workspace_id", AR_WORKSPACE_ID)
-    .like("receipt_no", `${prefix}%`);
-
-  if (receiptsError) {
-    return {
-      success: false,
-      error: receiptsError.message,
-    };
-  }
-
-  const nextNumber =
-    (existingReceipts ?? []).reduce((max, receipt) => {
-      const match = String(receipt.receipt_no).match(/(\d+)$/);
-      return Math.max(max, match ? Number(match[1]) : 0);
-    }, 0) + 1;
-
-  const receiptNo = `${prefix}${String(nextNumber).padStart(4, "0")}`;
-
-  const { error } = await supabase.from("receipts").insert({
-    workspace_id: AR_WORKSPACE_ID,
-    receipt_no: receiptNo,
-    customer_id: values.customerId,
-    receipt_date: values.receiptDate,
-    bank_amount: values.bankAmount,
-    tds_amount: values.tdsAmount,
-    mode: values.mode,
-    reference: values.reference,
-  });
-
-  if (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-
-  revalidatePath("/receipts");
-  revalidatePath("/customers");
-  revalidatePath("/");
-
-  return {
-    success: true,
-  };
-}
-export async function allocateReceipt(input: {
-  receiptId: number;
-  invoiceId: number;
-  allocationDate: string;
-  amount: number;
-}) {
-  if (
-    !Number.isInteger(input.receiptId) ||
-    !Number.isInteger(input.invoiceId) ||
-    input.amount <= 0 ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(input.allocationDate)
-  ) {
-    return {
-      success: false,
-      error: "Invalid allocation details.",
-    };
+  const settlement = values.bankAmount + values.tdsAmount;
+  if (settlement <= 0) {
+    return { success: false, error: "Enter the amount received (bank amount and/or TDS)." };
   }
 
   const data = await loadArData();
+  const customer = data.customers.find((c) => c.id === values.customerId);
+  if (!customer) return { success: false, error: "Customer not found." };
 
-  const receipt = data.receipts.find(
-    (item) => item.id === input.receiptId,
-  );
-
-  const invoice = data.invoices.find(
-    (item) => item.id === input.invoiceId,
-  );
-
-  if (!receipt) {
-    return {
-      success: false,
-      error: "Receipt not found.",
-    };
-  }
-
-  if (!invoice) {
-    return {
-      success: false,
-      error: "Invoice not found.",
-    };
-  }
-
-  if (receipt.customerId !== invoice.customerId) {
-    return {
-      success: false,
-      error: "Receipt and invoice must belong to the same customer.",
-    };
-  }
-
-  if (invoice.isCancelled) {
-    return {
-      success: false,
-      error: "Cancelled invoices cannot receive allocations.",
-    };
-  }
-
-  if (input.allocationDate < receipt.receiptDate) {
-    return {
-      success: false,
-      error: "Allocation date cannot be earlier than receipt date.",
-    };
-  }
-
-  if (input.allocationDate < invoice.invoiceDate) {
-    return {
-      success: false,
-      error: "Allocation date cannot be earlier than invoice date.",
-    };
-  }
-
-  const amountPaise = Math.round(input.amount * 100);
-
-  const settlement =
-    receipt.bankAmount + receipt.tdsAmount;
-
-  const existingReceiptAllocations = data.allocations
-    .filter(
-      (allocation) =>
-        allocation.receiptId === receipt.id &&
-        allocation.allocationDate <= input.allocationDate,
-    )
-    .reduce((sum, allocation) => sum + allocation.amount, 0);
-
-  if (
-    existingReceiptAllocations + amountPaise >
-    settlement
-  ) {
-    return {
-      success: false,
-      error: "Allocation exceeds the receipt settlement value.",
-    };
-  }
-
-  const existingInvoiceAllocations = data.allocations
-    .filter(
-      (allocation) =>
-        allocation.invoiceId === invoice.id &&
-        allocation.allocationDate <= input.allocationDate,
-    )
-    .reduce((sum, allocation) => sum + allocation.amount, 0);
-
-  const existingCreditNotes = data.creditNotes
-    .filter(
-      (note) =>
-        note.invoiceId === invoice.id &&
-        note.creditNoteDate <= input.allocationDate,
-    )
-    .reduce((sum, note) => sum + note.total, 0);
-
-  if (
-    existingInvoiceAllocations +
-      existingCreditNotes +
-      amountPaise >
-    invoice.total
-  ) {
-    return {
-      success: false,
-      error: "Allocation exceeds the invoice balance.",
-    };
-  }
-
-  const { error } = await supabase.from("allocations").insert({
-    receipt_id: receipt.id,
-    invoice_id: invoice.id,
-    allocation_date: input.allocationDate,
-    amount: input.amount,
+  const lines = values.allocations.filter((l) => l.amount > 0);
+  const problems = validateAllocations(data, {
+    customerId: customer.id,
+    receiptDate: values.receiptDate,
+    allocationDate: values.receiptDate,
+    available: settlement,
+    lines,
   });
+  if (problems.length > 0) return { success: false, error: problems.join(" ") };
 
-  if (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
+  // Insert the receipt. Retry once with a fresh number if another tab took it.
+  let receipt: { id: number; receipt_no: string } | null = null;
+  for (let attempt = 0; attempt < 2 && !receipt; attempt++) {
+    const fresh = attempt === 0 ? data : await loadArData();
+    const receiptNo = nextNumber("receipt", fresh, values.receiptDate);
+    const { data: row, error } = await supabase
+      .from("receipts")
+      .insert({
+        receipt_no: receiptNo,
+        customer_id: customer.id,
+        receipt_date: values.receiptDate,
+        bank_amount: values.bankAmount / 100,
+        tds_amount: values.tdsAmount / 100,
+        mode: values.mode,
+        reference: values.reference || null,
+      })
+      .select("id, receipt_no")
+      .single();
+    if (row) receipt = row;
+    else if (!isDuplicateNumberError(error?.message) || attempt === 1) {
+      return { success: false, error: error?.message ?? "The receipt could not be saved." };
+    }
+  }
+  if (!receipt) return { success: false, error: "The receipt could not be saved." };
+
+  if (lines.length > 0) {
+    const { error } = await supabase.from("allocations").insert(
+      lines.map((l) => ({
+        receipt_id: receipt!.id,
+        invoice_id: l.invoiceId,
+        allocation_date: values.receiptDate,
+        amount: l.amount / 100,
+      }))
+    );
+
+    if (error) {
+      const { error: undoError } = await supabase.from("receipts").delete().eq("id", receipt.id);
+      refresh();
+      if (undoError) {
+        return {
+          success: false,
+          error: `The allocations failed (${error.message}) and receipt ${receipt.receipt_no} could not be removed automatically (${undoError.message}). Delete it from the Receipts page.`,
+        };
+      }
+      return { success: false, error: `Nothing was saved. ${error.message}` };
+    }
   }
 
-  revalidatePath("/receipts");
-  revalidatePath(`/receipts/${receipt.id}/allocate`);
-  revalidatePath("/invoices");
-  revalidatePath("/customers");
-  revalidatePath("/");
-
+  refresh();
+  const unapplied = settlement - lines.reduce((s, l) => s + l.amount, 0);
   return {
     success: true,
+    receiptNo: receipt.receipt_no,
+    message:
+      `Saved ${receipt.receipt_no}` +
+      (unapplied > 0 ? `; ₹${rupees(unapplied)} kept as unapplied credit.` : "."),
   };
+}
+
+const allocateSchema = z.object({
+  receiptId: z.number().int().positive(),
+  allocationDate: date,
+  allocations: z.array(lineSchema).min(1, "Enter an amount against at least one invoice."),
+});
+
+/** Allocate a receipt's unapplied credit later (Part 2, Action 2). */
+export async function allocateReceipt(
+  input: z.input<typeof allocateSchema>
+): Promise<ActionResult> {
+  const parsed = allocateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Please check the allocation." };
+  }
+  const values = parsed.data;
+  const lines = values.allocations.filter((l) => l.amount > 0);
+  if (lines.length === 0) return { success: false, error: "Enter an amount against at least one invoice." };
+
+  const data = await loadArData();
+  const receipt = data.receipts.find((r) => r.id === values.receiptId);
+  if (!receipt) return { success: false, error: "Receipt not found." };
+
+  const problems = validateAllocations(data, {
+    customerId: receipt.customerId,
+    receiptDate: receipt.receiptDate,
+    allocationDate: values.allocationDate,
+    available: receiptAvailable(data, receipt.id),
+    lines,
+  });
+  if (problems.length > 0) return { success: false, error: problems.join(" ") };
+
+  const { error } = await supabase.from("allocations").insert(
+    lines.map((l) => ({
+      receipt_id: receipt.id,
+      invoice_id: l.invoiceId,
+      allocation_date: values.allocationDate,
+      amount: l.amount / 100,
+    }))
+  );
+  if (error) return { success: false, error: error.message };
+
+  refresh();
+  return { success: true, message: "Allocation saved." };
+}
+
+/** Correction: remove one allocation. Every figure is derived, so nothing else changes. */
+export async function removeAllocation(allocationId: number): Promise<ActionResult> {
+  if (!Number.isInteger(allocationId) || allocationId <= 0) {
+    return { success: false, error: "Invalid allocation." };
+  }
+  const { data: rows, error } = await supabase
+    .from("allocations")
+    .delete()
+    .eq("id", allocationId)
+    .select("id");
+  if (error) return { success: false, error: error.message };
+  if (!rows || rows.length === 0) return { success: false, error: "That allocation no longer exists." };
+
+  refresh();
+  return { success: true, message: "Allocation removed." };
+}
+
+/** Correction: delete a receipt, only when it has no allocations (R6). */
+export async function deleteReceipt(receiptId: number): Promise<ActionResult> {
+  if (!Number.isInteger(receiptId) || receiptId <= 0) {
+    return { success: false, error: "Invalid receipt." };
+  }
+  const data = await loadArData();
+  const receipt = data.receipts.find((r) => r.id === receiptId);
+  if (!receipt) return { success: false, error: "That receipt no longer exists." };
+
+  const check = canDeleteReceipt(data, receiptId);
+  if (!check.ok) return { success: false, error: check.reason };
+
+  // The database also refuses to delete a receipt that has allocations.
+  const { error } = await supabase.from("receipts").delete().eq("id", receiptId);
+  if (error) return { success: false, error: error.message };
+
+  refresh();
+  return { success: true, message: `Receipt ${receipt.receiptNo} deleted.` };
 }

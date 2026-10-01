@@ -22,9 +22,25 @@ export function gstSplit(
   taxable: Paise,
   ratePct: number
 ): GstSplit {
-  const isMaharashtra = (state ?? "").trim().toLowerCase() === "maharashtra";
+  return gstSplitByMode(isIntraState(state), taxable, ratePct);
+}
 
-  if (isMaharashtra) {
+/** The seller is in Maharashtra, so a Maharashtra customer is intra-state. */
+export function isIntraState(state: string | null): boolean {
+  return (state ?? "").trim().toLowerCase() === "maharashtra";
+}
+
+/**
+ * The same rule as `gstSplit`, for when the split is already decided:
+ * R7 says a credit note uses its INVOICE's split, whatever the customer's
+ * state says today.
+ */
+export function gstSplitByMode(
+  intraState: boolean,
+  taxable: Paise,
+  ratePct: number
+): GstSplit {
+  if (intraState) {
     const half = Math.round((taxable * ratePct) / 200);
     return { cgst: half, sgst: half, igst: 0 };
   }

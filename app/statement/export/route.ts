@@ -1,52 +1,46 @@
-import { NextResponse } from "next/server";
 import { loadArData } from "@/lib/ar/load";
-import { statement } from "@/lib/ar/calculations";
+import { getAsOf } from "@/lib/asof";
+import { AGEING_BUCKETS, statement } from "@/lib/ar/calculations";
+import { statementPeriod } from "@/lib/ar/statement-params";
+import { plainAmount } from "@/lib/ar/format";
+import { SELLER } from "@/lib/seller";
+import { csvResponse, toCsv } from "@/lib/csv";
+
+const drCr = (p: number) => (p > 0 ? "Dr" : p < 0 ? "Cr" : "");
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-
-  const customerId = Number(searchParams.get("customer"));
-  const from = searchParams.get("from") ?? "2026-04-01";
-  const to = searchParams.get("to") ?? "2026-08-31";
-
-  if (!Number.isInteger(customerId)) {
-    return new NextResponse("Invalid customer", { status: 400 });
-  }
+  const p = new URL(request.url).searchParams;
+  const asOf = getAsOf(p.get("asof") ?? undefined);
+  const { from, to, error } = statementPeriod(asOf, p.get("from"), p.get("to"));
+  if (error) return new Response(error, { status: 400 });
 
   const data = await loadArData();
+  const customer = data.customers.find((c) => c.id === Number(p.get("customer")));
+  if (!customer) return new Response("Customer not found", { status: 404 });
 
-  const customer = data.customers.find(
-    (item) => item.id === customerId,
-  );
+  const result = statement(data, customer.id, from, to);
+  const balance = (v: number) => [plainAmount(Math.abs(v)), drCr(v)];
 
-  if (!customer) {
-    return new NextResponse("Customer not found", { status: 404 });
-  }
-
-  const result = statement(data, customerId, from, to);
-
-  const rows = [
-    ["Date", "Type", "Document No", "Debit", "Credit", "Balance"],
-    ...result.lines.map((line) => [
-      line.date,
-      line.type,
-      line.documentNo,
-      (line.debit / 100).toFixed(2),
-      (line.credit / 100).toFixed(2),
-      (line.balance / 100).toFixed(2),
+  const csv = toCsv([
+    [SELLER.name, `${SELLER.address}, ${SELLER.state}`],
+    ["Statement of Account", customer.code, customer.name],
+    ["Period", from, to],
+    [],
+    ["Date", "Particulars", "Document No", "Debit", "Credit", "Balance", "Dr/Cr"],
+    [from, "Opening balance", "", "", "", ...balance(result.openingBalance)],
+    ...result.lines.map((l) => [
+      l.date,
+      l.type,
+      l.documentNo,
+      l.debit > 0 ? plainAmount(l.debit) : "",
+      l.credit > 0 ? plainAmount(l.credit) : "",
+      ...balance(l.balance),
     ]),
-  ];
+    [to, "Closing balance", "", "", "", ...balance(result.closingBalance)],
+    [],
+    ["Ageing of closing balance", ...AGEING_BUCKETS, "Unapplied credit"],
+    ["", ...AGEING_BUCKETS.map((b) => plainAmount(result.ageing[b])), plainAmount(result.unappliedCredit)],
+  ]);
 
-  const csv = rows
-    .map((row) =>
-      row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","),
-    )
-    .join("\n");
-
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="statement-${customer.code}.csv"`,
-    },
-  });
+  return csvResponse(csv, `Statement_${customer.code}_${from}_to_${to}.csv`);
 }

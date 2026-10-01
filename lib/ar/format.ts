@@ -39,3 +39,19 @@ export function formatBalance(
 ): string {
   return `${formatAmount(Math.abs(paise))} ${suffix}`;
 }
+/**
+ * R18: a balance with its Dr / Cr suffix decided by its sign.
+ * Positive = the customer owes us (Dr); negative = we owe them (Cr).
+ * Zero shows no suffix.
+ */
+export function formatDrCr(paise: Paise): string {
+  if (paise === 0) return formatAmount(0);
+  return formatBalance(paise, paise > 0 ? "Dr" : "Cr");
+}
+
+/** Rupees with 2 decimals and no symbol or grouping, for CSV files: 70800.00 */
+export function plainAmount(paise: Paise): string {
+  const sign = paise < 0 ? "-" : "";
+  const abs = Math.abs(paise);
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}

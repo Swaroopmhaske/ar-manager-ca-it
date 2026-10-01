@@ -1,59 +1,40 @@
-import { NextResponse } from "next/server";
 import { loadArData } from "@/lib/ar/load";
-import { invoicePosition } from "@/lib/ar/calculations";
+import { getAsOf } from "@/lib/asof";
+import { plainAmount } from "@/lib/ar/format";
+import { AGEING_BUCKETS, customerPositions } from "@/lib/ar/calculations";
+import { dashboardSummary } from "@/lib/ar/attention";
+import { csvResponse, toCsv } from "@/lib/csv";
 
+/** The ageing report (by customer, with a totals row), as on the dashboard. */
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const asOf = searchParams.get("asof") ?? "2026-08-31";
-
+  const asOf = getAsOf(new URL(request.url).searchParams.get("asof") ?? undefined);
   const data = await loadArData();
-  const customers = new Map(
-    data.customers.map((customer) => [customer.id, customer]),
+  const customers = new Map(data.customers.map((c) => [c.id, c]));
+  const positions = customerPositions(data, asOf).filter(
+    (p) => p.outstanding !== 0 || p.unappliedCredit !== 0
   );
+  const totals = dashboardSummary(data, asOf);
 
-  const rows = data.invoices
-    .filter((invoice) => invoice.invoiceDate <= asOf)
-    .map((invoice) => ({
-      invoice,
-      position: invoicePosition(data, invoice, asOf),
-    }))
-    .filter(
-      (item): item is typeof item & {
-        position: NonNullable<typeof item.position>;
-      } => item.position !== null && item.position.outstanding > 0,
-    );
-
-  const csvRows = [
-    [
-      "Invoice No",
-      "Customer",
-      "Due Date",
-      "Outstanding",
-      "Days Past Due",
-      "Ageing Bucket",
-    ],
-    ...rows.map(({ invoice, position }) => [
-      invoice.invoiceNo,
-      customers.get(invoice.customerId)?.name ?? "",
-      invoice.dueDate,
-      (position.outstanding / 100).toFixed(2),
-      String(position.daysPastDue),
-      position.bucket ?? "",
+  const csv = toCsv([
+    ["Ageing as at", asOf, "Days past due are counted from the due date"],
+    [],
+    ["Customer Code", "Customer", ...AGEING_BUCKETS, "Outstanding", "Unapplied Credit", "Net Balance"],
+    ...positions.map((p) => [
+      customers.get(p.customerId)?.code,
+      customers.get(p.customerId)?.name,
+      ...AGEING_BUCKETS.map((b) => plainAmount(p.ageing[b])),
+      plainAmount(p.outstanding),
+      plainAmount(p.unappliedCredit),
+      plainAmount(p.netBalance),
     ]),
-  ];
+    [
+      "Total", "",
+      ...AGEING_BUCKETS.map((b) => plainAmount(totals.ageing[b])),
+      plainAmount(totals.totalOutstanding),
+      plainAmount(totals.unappliedCredit),
+      plainAmount(totals.netReceivable),
+    ],
+  ]);
 
-  const csv = csvRows
-    .map((row) =>
-      row
-        .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-        .join(","),
-    )
-    .join("\n");
-
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="ageing.csv"',
-    },
-  });
+  return csvResponse(csv, `Ageing_${asOf}.csv`);
 }

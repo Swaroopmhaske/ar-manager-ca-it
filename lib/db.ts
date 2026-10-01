@@ -33,7 +33,6 @@ export const supabase = createClient(
   }
 );
 
-export const AR_WORKSPACE_ID = workspaceId;
 
 export async function dbQuery<T>(
   query: PromiseLike<{

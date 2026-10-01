@@ -2,7 +2,6 @@
   "customers": [
     {
       "id": 344,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "code": "C001",
       "name": "Tamhini Foods Pvt. Ltd.",
       "city": "Pune",
@@ -19,7 +18,6 @@
     },
     {
       "id": 345,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "code": "C002",
       "name": "Varandha Freight LLP",
       "city": "Mumbai",
@@ -36,7 +34,6 @@
     },
     {
       "id": 346,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "code": "C003",
       "name": "Kundalika Castings Pvt. Ltd.",
       "city": "Bengaluru",
@@ -53,7 +50,6 @@
     },
     {
       "id": 347,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "code": "C004",
       "name": "Pawana Healthcare Pvt. Ltd.",
       "city": "Pune",
@@ -70,7 +66,6 @@
     },
     {
       "id": 348,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "code": "C005",
       "name": "Sabarmati Retail Ventures Pvt. Ltd.",
       "city": "Ahmedabad",
@@ -87,7 +82,6 @@
     },
     {
       "id": 349,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "code": "C006",
       "name": "Mulshi Agro Producers",
       "city": "Pune",
@@ -104,7 +98,6 @@
     },
     {
       "id": 350,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "code": "C007",
       "name": "Krishnaveni Infra Projects Ltd.",
       "city": "Hyderabad",
@@ -121,7 +114,6 @@
     },
     {
       "id": 351,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "code": "C008",
       "name": "Kamshet Hospitality Pvt. Ltd.",
       "city": "Lonavala",
@@ -140,7 +132,6 @@
   "invoices": [
     {
       "id": 1233,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/25-26/0141",
       "customer_id": 346,
       "invoice_date": "2026-01-20",
@@ -158,7 +149,6 @@
     },
     {
       "id": 1234,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/25-26/0156",
       "customer_id": 346,
       "invoice_date": "2026-02-25",
@@ -176,7 +166,6 @@
     },
     {
       "id": 1235,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/25-26/0162",
       "customer_id": 345,
       "invoice_date": "2026-03-10",
@@ -194,7 +183,6 @@
     },
     {
       "id": 1236,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/25-26/0170",
       "customer_id": 347,
       "invoice_date": "2026-03-28",
@@ -212,7 +200,6 @@
     },
     {
       "id": 1237,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/25-26/0171",
       "customer_id": 351,
       "invoice_date": "2026-03-30",
@@ -230,7 +217,6 @@
     },
     {
       "id": 1238,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0001",
       "customer_id": 344,
       "invoice_date": "2026-04-05",
@@ -248,7 +234,6 @@
     },
     {
       "id": 1239,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0002",
       "customer_id": 350,
       "invoice_date": "2026-04-10",
@@ -266,7 +251,6 @@
     },
     {
       "id": 1240,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0003",
       "customer_id": 345,
       "invoice_date": "2026-04-18",
@@ -284,7 +268,6 @@
     },
     {
       "id": 1241,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0004",
       "customer_id": 346,
       "invoice_date": "2026-04-25",
@@ -302,7 +285,6 @@
     },
     {
       "id": 1242,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0005",
       "customer_id": 349,
       "invoice_date": "2026-04-28",
@@ -320,7 +302,6 @@
     },
     {
       "id": 1243,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0006",
       "customer_id": 344,
       "invoice_date": "2026-05-05",
@@ -338,7 +319,6 @@
     },
     {
       "id": 1244,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0007",
       "customer_id": 347,
       "invoice_date": "2026-05-12",
@@ -356,7 +336,6 @@
     },
     {
       "id": 1245,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0008",
       "customer_id": 350,
       "invoice_date": "2026-05-15",
@@ -374,7 +353,6 @@
     },
     {
       "id": 1246,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0009",
       "customer_id": 345,
       "invoice_date": "2026-05-22",
@@ -392,7 +370,6 @@
     },
     {
       "id": 1247,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0010",
       "customer_id": 347,
       "invoice_date": "2026-06-01",
@@ -410,7 +387,6 @@
     },
     {
       "id": 1248,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0011",
       "customer_id": 344,
       "invoice_date": "2026-06-05",
@@ -428,7 +404,6 @@
     },
     {
       "id": 1249,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0012",
       "customer_id": 349,
       "invoice_date": "2026-06-15",
@@ -446,7 +421,6 @@
     },
     {
       "id": 1250,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0013",
       "customer_id": 346,
       "invoice_date": "2026-06-28",
@@ -464,7 +438,6 @@
     },
     {
       "id": 1251,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0014",
       "customer_id": 350,
       "invoice_date": "2026-07-01",
@@ -482,7 +455,6 @@
     },
     {
       "id": 1252,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0015",
       "customer_id": 350,
       "invoice_date": "2026-07-02",
@@ -500,7 +472,6 @@
     },
     {
       "id": 1253,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0016",
       "customer_id": 344,
       "invoice_date": "2026-07-05",
@@ -518,7 +489,6 @@
     },
     {
       "id": 1254,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0017",
       "customer_id": 348,
       "invoice_date": "2026-07-15",
@@ -536,7 +506,6 @@
     },
     {
       "id": 1255,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0018",
       "customer_id": 345,
       "invoice_date": "2026-07-20",
@@ -554,7 +523,6 @@
     },
     {
       "id": 1256,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0019",
       "customer_id": 347,
       "invoice_date": "2026-07-30",
@@ -572,7 +540,6 @@
     },
     {
       "id": 1257,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0020",
       "customer_id": 349,
       "invoice_date": "2026-08-01",
@@ -590,7 +557,6 @@
     },
     {
       "id": 1258,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0021",
       "customer_id": 344,
       "invoice_date": "2026-08-05",
@@ -608,7 +574,6 @@
     },
     {
       "id": 1259,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0022",
       "customer_id": 348,
       "invoice_date": "2026-08-20",
@@ -626,7 +591,6 @@
     },
     {
       "id": 1260,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0023",
       "customer_id": 350,
       "invoice_date": "2026-08-25",
@@ -644,7 +608,6 @@
     },
     {
       "id": 1261,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "invoice_no": "BWA/26-27/0024",
       "customer_id": 344,
       "invoice_date": "2026-09-05",
@@ -664,7 +627,6 @@
   "credit_notes": [
     {
       "id": 47,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "credit_note_no": "BWA/CN/26-27/001",
       "invoice_id": 1244,
       "credit_note_date": "2026-07-25",
@@ -680,7 +642,6 @@
   "receipts": [
     {
       "id": 743,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0001",
       "customer_id": 351,
       "receipt_date": "2026-04-25",
@@ -692,7 +653,6 @@
     },
     {
       "id": 744,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0002",
       "customer_id": 346,
       "receipt_date": "2026-04-30",
@@ -704,7 +664,6 @@
     },
     {
       "id": 745,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0003",
       "customer_id": 344,
       "receipt_date": "2026-05-03",
@@ -716,7 +675,6 @@
     },
     {
       "id": 746,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0004",
       "customer_id": 349,
       "receipt_date": "2026-05-10",
@@ -728,7 +686,6 @@
     },
     {
       "id": 747,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0005",
       "customer_id": 345,
       "receipt_date": "2026-05-20",
@@ -740,7 +697,6 @@
     },
     {
       "id": 748,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0006",
       "customer_id": 344,
       "receipt_date": "2026-06-02",
@@ -752,7 +708,6 @@
     },
     {
       "id": 749,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0007",
       "customer_id": 345,
       "receipt_date": "2026-06-15",
@@ -764,7 +719,6 @@
     },
     {
       "id": 750,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0008",
       "customer_id": 347,
       "receipt_date": "2026-06-20",
@@ -776,7 +730,6 @@
     },
     {
       "id": 751,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0009",
       "customer_id": 350,
       "receipt_date": "2026-06-25",
@@ -788,7 +741,6 @@
     },
     {
       "id": 752,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0010",
       "customer_id": 344,
       "receipt_date": "2026-07-08",
@@ -800,7 +752,6 @@
     },
     {
       "id": 753,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0011",
       "customer_id": 348,
       "receipt_date": "2026-07-10",
@@ -812,7 +763,6 @@
     },
     {
       "id": 754,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0012",
       "customer_id": 349,
       "receipt_date": "2026-07-20",
@@ -824,7 +774,6 @@
     },
     {
       "id": 755,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0013",
       "customer_id": 347,
       "receipt_date": "2026-08-14",
@@ -836,7 +785,6 @@
     },
     {
       "id": 756,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0014",
       "customer_id": 344,
       "receipt_date": "2026-08-20",
@@ -848,7 +796,6 @@
     },
     {
       "id": 757,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0015",
       "customer_id": 350,
       "receipt_date": "2026-09-08",
@@ -860,7 +807,6 @@
     },
     {
       "id": 758,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0016",
       "customer_id": 345,
       "receipt_date": "2026-09-09",
@@ -872,7 +818,6 @@
     },
     {
       "id": 759,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_no": "RCT/26-27/0017",
       "customer_id": 344,
       "receipt_date": "2026-09-10",
@@ -886,7 +831,6 @@
   "allocations": [
     {
       "id": 789,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 743,
       "invoice_id": 1237,
       "allocation_date": "2026-04-25",
@@ -895,7 +839,6 @@
     },
     {
       "id": 790,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 744,
       "invoice_id": 1234,
       "allocation_date": "2026-04-30",
@@ -904,7 +847,6 @@
     },
     {
       "id": 791,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 745,
       "invoice_id": 1238,
       "allocation_date": "2026-05-03",
@@ -913,7 +855,6 @@
     },
     {
       "id": 792,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 746,
       "invoice_id": 1242,
       "allocation_date": "2026-05-10",
@@ -922,7 +863,6 @@
     },
     {
       "id": 793,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 747,
       "invoice_id": 1235,
       "allocation_date": "2026-05-20",
@@ -931,7 +871,6 @@
     },
     {
       "id": 794,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 748,
       "invoice_id": 1243,
       "allocation_date": "2026-06-02",
@@ -940,7 +879,6 @@
     },
     {
       "id": 795,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 749,
       "invoice_id": 1240,
       "allocation_date": "2026-06-15",
@@ -949,7 +887,6 @@
     },
     {
       "id": 796,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 750,
       "invoice_id": 1236,
       "allocation_date": "2026-06-20",
@@ -958,7 +895,6 @@
     },
     {
       "id": 797,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 751,
       "invoice_id": 1239,
       "allocation_date": "2026-06-25",
@@ -967,7 +903,6 @@
     },
     {
       "id": 798,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 751,
       "invoice_id": 1245,
       "allocation_date": "2026-06-25",
@@ -976,7 +911,6 @@
     },
     {
       "id": 799,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 752,
       "invoice_id": 1248,
       "allocation_date": "2026-07-08",
@@ -985,7 +919,6 @@
     },
     {
       "id": 800,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 754,
       "invoice_id": 1249,
       "allocation_date": "2026-07-20",
@@ -994,7 +927,6 @@
     },
     {
       "id": 801,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 755,
       "invoice_id": 1244,
       "allocation_date": "2026-08-14",
@@ -1003,7 +935,6 @@
     },
     {
       "id": 802,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 756,
       "invoice_id": 1253,
       "allocation_date": "2026-08-20",
@@ -1012,7 +943,6 @@
     },
     {
       "id": 803,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 753,
       "invoice_id": 1254,
       "allocation_date": "2026-09-05",
@@ -1021,7 +951,6 @@
     },
     {
       "id": 804,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 757,
       "invoice_id": 1252,
       "allocation_date": "2026-09-08",
@@ -1030,7 +959,6 @@
     },
     {
       "id": 805,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 758,
       "invoice_id": 1246,
       "allocation_date": "2026-09-09",
@@ -1039,7 +967,6 @@
     },
     {
       "id": 806,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "receipt_id": 759,
       "invoice_id": 1258,
       "allocation_date": "2026-09-10",
@@ -1050,7 +977,6 @@
   "notes": [
     {
       "id": 315,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "customer_id": 348,
       "invoice_id": null,
       "note_date": "2026-07-10",
@@ -1064,7 +990,6 @@
     },
     {
       "id": 316,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "customer_id": 345,
       "invoice_id": 1240,
       "note_date": "2026-07-20",
@@ -1078,7 +1003,6 @@
     },
     {
       "id": 317,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "customer_id": 347,
       "invoice_id": 1247,
       "note_date": "2026-07-26",
@@ -1092,7 +1016,6 @@
     },
     {
       "id": 318,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "customer_id": 346,
       "invoice_id": null,
       "note_date": "2026-08-10",
@@ -1106,7 +1029,6 @@
     },
     {
       "id": 319,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "customer_id": 347,
       "invoice_id": 1244,
       "note_date": "2026-08-20",
@@ -1120,7 +1042,6 @@
     },
     {
       "id": 320,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "customer_id": 349,
       "invoice_id": 1257,
       "note_date": "2026-08-25",
@@ -1134,7 +1055,6 @@
     },
     {
       "id": 321,
-      "workspace_id": "8d4959f2-4d78-4bae-a114-45543c957ce9",
       "customer_id": 345,
       "invoice_id": 1246,
       "note_date": "2026-09-02",

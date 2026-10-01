@@ -97,6 +97,30 @@ export interface InvoiceFilter {
   to?: string;
 }
 
+export const INVOICE_STATUSES: (InvoiceListStatus | "All")[] = ["All", "Due", "Overdue", "Paid", "Cancelled"];
+
+const isDateParam = (v?: string) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+/** Reads list filters from URL parameters (shared by the page and its CSV export). */
+export function invoiceFilterFromParams(params: {
+  q?: string | null;
+  customer?: string | null;
+  status?: string | null;
+  disputed?: string | null;
+  from?: string | null;
+  to?: string | null;
+}): InvoiceFilter {
+  const status = params.status as InvoiceListStatus | "All";
+  return {
+    q: params.q ?? undefined,
+    customerId: Number(params.customer) || null,
+    status: INVOICE_STATUSES.includes(status) ? status : "All",
+    disputed: params.disputed === "yes" || params.disputed === "no" ? params.disputed : "all",
+    from: isDateParam(params.from ?? undefined) ? params.from! : undefined,
+    to: isDateParam(params.to ?? undefined) ? params.to! : undefined,
+  };
+}
+
 export function filterInvoiceRows(
   rows: InvoiceListRow[],
   filter: InvoiceFilter
@@ -272,5 +296,64 @@ export function sortCustomerRows(
     (a, b) =>
       sign * compareValues(customerSortValue(a, key), customerSortValue(b, key)) ||
       compareValues(a.customer.code, b.customer.code)
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Receipt list                                                        */
+/* ------------------------------------------------------------------ */
+
+export interface ReceiptListRow {
+  receipt: import("./types").Receipt;
+  customerCode: string;
+  customerName: string;
+  settlement: Paise;
+  /** Allocated from this receipt with allocation_date ≤ asOf (R10). */
+  allocated: Paise;
+  /** Unapplied as at asOf. */
+  unapplied: Paise;
+  /** Allocations of ANY date: a receipt can be deleted only when this is 0. */
+  allocationCount: number;
+}
+
+/** Receipts dated on or before asOf, newest first. */
+export function receiptListRows(data: ArData, asOf: string): ReceiptListRow[] {
+  const customers = new Map(data.customers.map((c) => [c.id, c]));
+  return data.receipts
+    .filter((r) => r.receiptDate <= asOf)
+    .map((receipt) => {
+      const mine = data.allocations.filter((a) => a.receiptId === receipt.id);
+      const allocated = mine
+        .filter((a) => a.allocationDate <= asOf)
+        .reduce((s, a) => s + a.amount, 0);
+      const settlement = receipt.bankAmount + receipt.tdsAmount;
+      const customer = customers.get(receipt.customerId);
+      return {
+        receipt,
+        customerCode: customer?.code ?? "",
+        customerName: customer?.name ?? "",
+        settlement,
+        allocated,
+        unapplied: settlement - allocated,
+        allocationCount: mine.length,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.receipt.receiptDate.localeCompare(a.receipt.receiptDate) ||
+        b.receipt.receiptNo.localeCompare(a.receipt.receiptNo)
+    );
+}
+
+export function receiptListTotals(rows: ReceiptListRow[]) {
+  return rows.reduce(
+    (t, r) => ({
+      bank: t.bank + r.receipt.bankAmount,
+      tds: t.tds + r.receipt.tdsAmount,
+      settlement: t.settlement + r.settlement,
+      allocated: t.allocated + r.allocated,
+      unapplied: t.unapplied + r.unapplied,
+    }),
+    { bank: 0, tds: 0, settlement: 0, allocated: 0, unapplied: 0 }
   );
 }

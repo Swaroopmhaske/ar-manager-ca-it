@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadArData } from "@/lib/ar/load";
 import { getAsOf } from "@/lib/asof";
-import { invoicePosition } from "@/lib/ar/calculations";
+import { invoiceListRows } from "@/lib/ar/lists";
+import { RemoveAllocationButton } from "@/app/receipts/components/CorrectionButtons";
 import { formatAmount, formatDate } from "@/lib/ar/format";
 
 export default async function InvoicePage({
@@ -28,11 +29,18 @@ export default async function InvoicePage({
     notFound();
   }
 
-  const position = invoicePosition(data, invoice, asof);
-
-  if (!position) {
-    notFound();
-  }
+  // Cancelled invoices keep their page (R8: they keep their number and show
+  // as Cancelled); an invoice dated after the as-at date does not exist yet.
+  const row = invoiceListRows(data, asof).find((r) => r.invoice.id === invoice.id);
+  const position = row ?? {
+    received: 0,
+    credited: 0,
+    outstanding: 0,
+    status: "Not yet issued" as const,
+    daysLate: 0,
+    isPartPaid: false,
+  };
+  const isCancelled = invoice.isCancelled;
 
   const customer = data.customers.find(
     (item) => item.id === invoice.customerId
@@ -80,12 +88,14 @@ export default async function InvoicePage({
           </div>
 
           <div className="flex gap-2">
+            {!isCancelled && (
             <Link
               href={`/invoices/${invoice.id}/credit-note?asof=${encodeURIComponent(asof)}`}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
             >
               Credit Note
             </Link>
+            )}
 
             <Link
               href={`/invoices/${invoice.id}/actions?asof=${encodeURIComponent(asof)}`}
@@ -96,6 +106,19 @@ export default async function InvoicePage({
           </div>
         </div>
       </div>
+
+      {isCancelled && (
+        <p className="mb-6 rounded-lg border border-slate-300 bg-slate-100 p-3 text-sm text-slate-700">
+          This invoice is <strong>Cancelled</strong>. It keeps its number but is left out of every total, balance,
+          ageing figure, statement and DSO.
+        </p>
+      )}
+      {!row && (
+        <p className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          This invoice is dated {formatDate(invoice.invoiceDate)}, after the as-at date {formatDate(asof)}, so it does
+          not count yet.
+        </p>
+      )}
 
       <div className="mb-6 grid gap-4 md:grid-cols-4">
         <Card
@@ -149,11 +172,7 @@ export default async function InvoicePage({
             />
             <Detail
               label="Days Late"
-              value={
-                position.daysPastDue > 0
-                  ? String(position.daysPastDue)
-                  : "—"
-              }
+              value={position.daysLate > 0 ? String(position.daysLate) : "—"}
             />
             <Detail
               label="Part Paid"
@@ -223,6 +242,7 @@ export default async function InvoicePage({
                 <th className="py-3">Allocation Date</th>
                 <th className="py-3">Receipt</th>
                 <th className="py-3 text-right">Amount</th>
+                <th className="py-3 text-right" />
               </tr>
             </thead>
 
@@ -242,11 +262,23 @@ export default async function InvoicePage({
                     </td>
 
                     <td className="py-3">
-                      {receipt?.receiptNo ?? "—"}
+                      {receipt ? (
+                        <Link href={`/receipts/${receipt.id}/allocate?asof=${asof}`} className="text-blue-700 hover:underline">
+                          {receipt.receiptNo}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
                     </td>
 
                     <td className="py-3 text-right">
                       {formatAmount(allocation.amount)}
+                    </td>
+                    <td className="py-3 text-right">
+                      <RemoveAllocationButton
+                        allocationId={allocation.id}
+                        label={`${formatAmount(allocation.amount)} from ${receipt?.receiptNo ?? "the receipt"}`}
+                      />
                     </td>
                   </tr>
                 );

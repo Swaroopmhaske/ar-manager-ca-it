@@ -1,347 +1,233 @@
 import Link from "next/link";
 import { loadArData } from "@/lib/ar/load";
 import { getAsOf } from "@/lib/asof";
-import {
-  AGEING_BUCKETS,
-  customerPosition,
-  invoicePosition,
-  dso,
-} from "@/lib/ar/calculations";
-import { formatAmount, formatDate } from "@/lib/ar/format";
+import { AGEING_BUCKETS, customerPositions } from "@/lib/ar/calculations";
+import { dashboardSummary, needsAttention, overdueInvoices } from "@/lib/ar/attention";
+import { formatAmount, formatDate, formatDrCr } from "@/lib/ar/format";
 
-export default async function Dashboard({
-  searchParams,
-}: {
-  searchParams: Promise<{ asof?: string }>;
-}) {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ asof?: string }> }) {
   const params = await searchParams;
   const asof = getAsOf(params.asof);
-
   const data = await loadArData();
 
-  const invoiceRows = data.invoices
-    .filter((invoice) => invoice.invoiceDate <= asof)
-    .map((invoice) => invoicePosition(data, invoice, asof))
-    .filter((row): row is NonNullable<typeof row> => row !== null);
-
-  const customerRows = data.customers.map((customer) => ({
-    customer,
-    position: customerPosition(data, customer.id, asof),
-  }));
-
-  const totalOutstanding = invoiceRows.reduce(
-    (sum, row) => sum + row.outstanding,
-    0
-  );
-
-  const overdueAmount = invoiceRows
-    .filter((row) => row.status === "Overdue")
-    .reduce((sum, row) => sum + row.outstanding, 0);
-
-  const overdueCount = invoiceRows.filter(
-    (row) => row.status === "Overdue"
-  ).length;
-
-  const unappliedCredit = customerRows.reduce(
-    (sum, row) => sum + row.position.unappliedCredit,
-    0
-  );
-
-  const netReceivable = totalOutstanding - unappliedCredit;
-
-  const overduePct =
-    totalOutstanding > 0
-      ? Math.round((overdueAmount / totalOutstanding) * 100)
-      : 0;
-
-  const overdueRows = invoiceRows
-    .filter((row) => row.status === "Overdue")
-    .sort((a, b) => {
-      if (b.daysPastDue !== a.daysPastDue) {
-        return b.daysPastDue - a.daysPastDue;
-      }
-
-      return a.invoice.invoiceNo.localeCompare(
-        b.invoice.invoiceNo
-      );
-    });
-
-  const attentionCustomers = customerRows.filter(
-    ({ position }) => position.overLimit
-  );
-
-  const dsoValue = dso(data, asof);
+  const summary = dashboardSummary(data, asof);
+  const attention = needsAttention(data, asof);
+  const overdue = overdueInvoices(data, asof);
+  const customers = new Map(data.customers.map((c) => [c.id, c]));
+  const ageingRows = customerPositions(data, asof).filter((p) => p.outstanding !== 0 || p.unappliedCredit !== 0);
+  const q = `asof=${encodeURIComponent(asof)}`;
 
   return (
-    <main className="mx-auto max-w-7xl p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">
-          Overdue at a Glance
-        </h1>
-
-        <p className="mt-1 text-sm text-slate-500">
-          Accounts receivable position as at {formatDate(asof)}
-        </p>
+    <main className="mx-auto max-w-[90rem] p-6">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Overdue at a glance</h1>
+          <p className="mt-1 text-sm text-slate-500">As at {formatDate(asof)}</p>
+        </div>
+        <a href={`/ageing/export?${q}`} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50">
+          Export ageing CSV
+        </a>
       </div>
 
-      <section className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
-        <Metric
-          label="Outstanding"
-          value={formatAmount(totalOutstanding)}
-        />
-
-        <Metric
-          label="Unapplied Credit"
-          value={formatAmount(unappliedCredit)}
-        />
-
-        <Metric
-          label="Net Receivable"
-          value={formatAmount(netReceivable)}
-        />
-
-        <Metric
+      <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+        <Card label="Outstanding on invoices" value={formatAmount(summary.totalOutstanding)} />
+        <Card label="Unapplied credit" value={formatAmount(summary.unappliedCredit)} />
+        <Card label="Net receivable" value={formatDrCr(summary.netReceivable)} />
+        <Card
           label="Overdue"
-          value={formatAmount(overdueAmount)}
+          value={formatAmount(summary.overdue)}
+          note={`${summary.overduePct}% of outstanding`}
+          tone="red"
         />
-
-        <Metric
-          label="Overdue %"
-          value={`${overduePct}%`}
-        />
-
-        <Metric
-          label="DSO"
-          value={`${dsoValue}`}
-        />
+        <Card label="DSO" value={summary.dso === null ? "—" : `${summary.dso} days`} note="90-day window" />
+        <Card label="Overdue invoices" value={String(summary.overdueInvoiceCount)} tone="red" />
       </section>
 
-      <section className="mt-4 grid gap-4 md:grid-cols-2">
-        <Metric
-          label="Overdue Invoices"
-          value={String(overdueCount)}
-        />
-
-        <Metric
-          label="Customers Over Limit"
-          value={String(attentionCustomers.length)}
-        />
-      </section>
-
-      <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold">
-              Ageing by Customer
-            </h2>
-<a
-  href={`/ageing/export?asof=${asof}`}
-  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
->
-  Export Ageing CSV
-</a>
-
-            <p className="text-sm text-slate-500">
-              Outstanding balances grouped by ageing bucket.
-            </p>
-          </div>
-
-          <Link
-            href={`/customers?asof=${encodeURIComponent(asof)}`}
-            className="text-sm text-blue-600 hover:underline"
-          >
-            View customers
-          </Link>
+      <section className="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b px-5 py-4">
+          <h2 className="text-lg font-semibold">Ageing by customer</h2>
+          <span className="text-xs text-slate-500">Days past due from the due date · click a row for its invoices</span>
         </div>
-
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-3">Customer</th>
-                {AGEING_BUCKETS.map((bucket) => (
-                  <th key={bucket} className="px-3 py-3 text-right">
-                    {bucket}
+                <th className="px-3 py-3 text-left">Customer</th>
+                {AGEING_BUCKETS.map((b) => (
+                  <th key={b} className="px-3 py-3 text-right">
+                    {b}
                   </th>
                 ))}
+                <th className="px-3 py-3 text-right">Outstanding</th>
                 <th className="px-3 py-3 text-right">Unapplied</th>
+                <th className="px-3 py-3 text-right">Net balance</th>
               </tr>
             </thead>
-
             <tbody>
-              {customerRows.map(({ customer, position }) => (
-                <tr
-                  key={customer.id}
-                  className="border-b border-slate-100"
-                >
-                  <td className="px-3 py-3">
-                    <Link
-                      href={`/customers/${customer.id}?asof=${encodeURIComponent(asof)}`}
-                      className="text-blue-600 hover:underline"
-                    >
-                      {customer.code} — {customer.name}
-                    </Link>
-                  </td>
-
-                  {AGEING_BUCKETS.map((bucket) => (
-                    <td key={bucket} className="px-3 py-3 text-right">
-                      {formatAmount(position.ageing[bucket])}
-                    </td>
-                  ))}
-
-                  <td className="px-3 py-3 text-right">
-                    {formatAmount(position.unappliedCredit)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold">
-            Overdue Invoices
-          </h2>
-
-          <p className="text-sm text-slate-500">
-            Longest overdue first.
-          </p>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50">
-              <tr>
-                <th className="px-3 py-3">Invoice</th>
-                <th className="px-3 py-3">Customer</th>
-                <th className="px-3 py-3">Due</th>
-                <th className="px-3 py-3 text-right">Days Late</th>
-                <th className="px-3 py-3 text-right">
-                  Outstanding
-                </th>
-                <th className="px-3 py-3">Labels</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {overdueRows.map((row) => {
-                const customer = data.customers.find(
-                  (item) =>
-                    item.id === row.invoice.customerId
-                );
-
+              {ageingRows.map((p) => {
+                const c = customers.get(p.customerId)!;
                 return (
-                  <tr
-                    key={row.invoice.id}
-                    className="border-b border-red-100 bg-red-50"
-                  >
-                    <td className="px-3 py-3 font-medium">
+                  <tr key={p.customerId} className="border-t border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2.5">
                       <Link
-                        href={`/invoices/${row.invoice.id}?asof=${encodeURIComponent(asof)}`}
+                        href={`/invoices?${q}&customer=${c.id}`}
                         className="text-blue-700 hover:underline"
+                        title="This customer's invoices"
                       >
-                        {row.invoice.invoiceNo}
+                        {c.code} — {c.name}
                       </Link>
                     </td>
-
-                    <td className="px-3 py-3">
-                      {customer?.code} — {customer?.name}
-                    </td>
-
-                    <td className="px-3 py-3">
-                      {formatDate(row.invoice.dueDate)}
-                    </td>
-
-                    <td className="px-3 py-3 text-right font-semibold text-red-700">
-                      {row.daysPastDue}
-                    </td>
-
-                    <td className="px-3 py-3 text-right font-semibold">
-                      {formatAmount(row.outstanding)}
-                    </td>
-
-                    <td className="px-3 py-3">
-                      <div className="flex gap-1">
-                        {row.isPartPaid && (
-                          <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-800">
-                            Part-paid
-                          </span>
-                        )}
-
-                        {row.invoice.isDisputed && (
-                          <span className="rounded bg-amber-100 px-2 py-1 text-xs text-amber-800">
-                            Disputed
-                          </span>
-                        )}
-                      </div>
-                    </td>
+                    {AGEING_BUCKETS.map((b) => (
+                      <td key={b} className={`px-3 py-2.5 text-right tabular-nums ${p.ageing[b] === 0 ? "text-slate-300" : ""}`}>
+                        {formatAmount(p.ageing[b])}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatAmount(p.outstanding)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{formatAmount(p.unappliedCredit)}</td>
+                    <td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatDrCr(p.netBalance)}</td>
                   </tr>
                 );
               })}
             </tbody>
+            <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+              <tr>
+                <td className="px-3 py-3">Total</td>
+                {AGEING_BUCKETS.map((b) => (
+                  <td key={b} className="px-3 py-3 text-right tabular-nums">
+                    {formatAmount(summary.ageing[b])}
+                  </td>
+                ))}
+                <td className="px-3 py-3 text-right tabular-nums">{formatAmount(summary.totalOutstanding)}</td>
+                <td className="px-3 py-3 text-right tabular-nums">{formatAmount(summary.unappliedCredit)}</td>
+                <td className="px-3 py-3 text-right tabular-nums">{formatDrCr(summary.netReceivable)}</td>
+              </tr>
+            </tfoot>
           </table>
-
-          {overdueRows.length === 0 && (
-            <p className="p-6 text-center text-sm text-slate-500">
-              No overdue invoices.
-            </p>
-          )}
         </div>
       </section>
 
-      <section className="mt-8 rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="text-lg font-semibold">
-          Needs Attention
-        </h2>
+      <div className="grid gap-8 lg:grid-cols-3">
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm lg:col-span-2">
+          <h2 className="border-b px-5 py-4 text-lg font-semibold">Overdue invoices</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left">
+                <tr>
+                  <th className="px-3 py-3">Invoice</th>
+                  <th className="px-3 py-3">Customer</th>
+                  <th className="px-3 py-3">Due date</th>
+                  <th className="px-3 py-3 text-right">Days late</th>
+                  <th className="px-3 py-3 text-right">Outstanding</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overdue.map((p) => {
+                  const c = customers.get(p.invoice.customerId);
+                  return (
+                    <tr key={p.invoice.id} className="border-t border-red-100 bg-red-50 text-red-900">
+                      <td className="px-3 py-2.5">
+                        <Link href={`/invoices/${p.invoice.id}?${q}`} className="font-medium hover:underline">
+                          {p.invoice.invoiceNo}
+                        </Link>
+                        {p.invoice.isDisputed && (
+                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Disputed</span>
+                        )}
+                        {p.isPartPaid && (
+                          <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">Part-paid</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">{c?.name}</td>
+                      <td className="px-3 py-2.5">{formatDate(p.invoice.dueDate)}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{p.daysPastDue}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{formatAmount(p.outstanding)}</td>
+                    </tr>
+                  );
+                })}
+                {overdue.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                      No overdue invoices.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
-        <div className="mt-4 space-y-3">
-          {attentionCustomers.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No customers are currently over their credit
-              limit.
-            </p>
-          ) : (
-            attentionCustomers.map(
-              ({ customer, position }) => (
-                <Link
-                  key={customer.id}
-                  href={`/customers/${customer.id}?asof=${encodeURIComponent(asof)}`}
-                  className="block rounded-lg border border-amber-200 bg-amber-50 p-4 hover:bg-amber-100"
-                >
-                  <div className="font-medium">
-                    {customer.code} — {customer.name}
-                  </div>
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold">Needs attention</h2>
 
-                  <div className="mt-1 text-sm text-amber-800">
-                    Net balance {formatAmount(position.netBalance)}
-                    {" "}is above credit limit{" "}
-                    {formatAmount(customer.creditLimit)}
-                  </div>
-                </Link>
-              )
-            )
-          )}
-        </div>
-      </section>
+          <Group title="Over credit limit" count={attention.overLimit.length}>
+            {attention.overLimit.map(({ customer, position }) => (
+              <Item key={customer.id} href={`/customers/${customer.id}?${q}`} title={customer.name}>
+                Net {formatDrCr(position.netBalance)} vs limit {formatAmount(customer.creditLimit)}
+              </Item>
+            ))}
+          </Group>
+
+          <Group title="Broken promises" count={attention.brokenPromises.length}>
+            {attention.brokenPromises.map(({ customer, note }) => (
+              <Item key={note.id} href={`/customers/${customer.id}?${q}`} title={customer.name}>
+                Promised {formatAmount(note.promiseAmount ?? 0)} by {formatDate(note.promiseDate!)} (noted{" "}
+                {formatDate(note.noteDate)})
+              </Item>
+            ))}
+          </Group>
+
+          <Group title="Follow-ups due" count={attention.followUpsDue.length}>
+            {attention.followUpsDue.map(({ customer, note }) => (
+              <Item key={note.id} href={`/customers/${customer.id}/notes?${q}`} title={customer.name}>
+                Due {formatDate(note.followUpDate!)} · {note.noteType}: {note.body.slice(0, 70)}
+                {note.body.length > 70 ? "…" : ""}
+              </Item>
+            ))}
+          </Group>
+
+          <Group title="Unapplied credit to allocate" count={attention.unappliedCredit.length}>
+            {attention.unappliedCredit.map(({ customer, position }) => (
+              <Item key={customer.id} href={`/customers/${customer.id}?${q}`} title={customer.name}>
+                {formatAmount(position.unappliedCredit)} received but not allocated
+              </Item>
+            ))}
+          </Group>
+        </section>
+      </div>
     </main>
   );
 }
 
-function Metric({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function Card({ label, value, note, tone }: { label: string; value: string; note?: string; tone?: "red" }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-2 text-xl font-bold text-slate-900">
-        {value}
-      </p>
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className={`mt-1 text-xl font-bold tabular-nums ${tone === "red" ? "text-red-700" : ""}`}>{value}</p>
+      {note && <p className="mt-0.5 text-xs text-slate-500">{note}</p>}
     </div>
+  );
+}
+
+function Group({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  return (
+    <div className="mb-5 last:mb-0">
+      <h3 className="mb-2 flex items-center justify-between text-sm font-semibold">
+        {title}
+        <span className={`rounded-full px-2 text-xs ${count > 0 ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-500"}`}>
+          {count}
+        </span>
+      </h3>
+      {count === 0 ? <p className="text-xs text-slate-400">None</p> : <ul className="space-y-2">{children}</ul>}
+    </div>
+  );
+}
+
+function Item({ href, title, children }: { href: string; title: string; children: React.ReactNode }) {
+  return (
+    <li className="rounded-lg border border-slate-100 p-2.5 text-sm">
+      <Link href={href} className="font-medium text-blue-700 hover:underline">
+        {title}
+      </Link>
+      <p className="mt-0.5 text-xs text-slate-600">{children}</p>
+    </li>
   );
 }

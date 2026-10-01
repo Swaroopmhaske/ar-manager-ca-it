@@ -42,7 +42,13 @@ async function main() {
       throw new Error(`${table}: ${error.message}`);
     }
 
-    snapshot[table] = data ?? [];
+    // Drop workspace_id: the fixture is committed to a public repository,
+    // and the workspace id is the key to the workspace's data (README 4.9).
+    snapshot[table] = (data ?? []).map((row) => {
+      const copy = { ...row } as Record<string, unknown>;
+      delete copy.workspace_id;
+      return copy;
+    });
 
     console.log(`${table}: ${data?.length ?? 0} records`);
   }

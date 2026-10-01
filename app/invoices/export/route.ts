@@ -1,67 +1,63 @@
-import { NextResponse } from "next/server";
 import { loadArData } from "@/lib/ar/load";
-import { invoicePosition } from "@/lib/ar/calculations";
+import { getAsOf } from "@/lib/asof";
+import { plainAmount } from "@/lib/ar/format";
+import {
+  filterInvoiceRows,
+  invoiceFilterFromParams,
+  invoiceListRows,
+  invoiceListTotals,
+  isInvoiceSortKey,
+  sortInvoiceRows,
+} from "@/lib/ar/lists";
+import { csvResponse, toCsv } from "@/lib/csv";
 
+/** CSV of the invoice list exactly as filtered and sorted on screen. */
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const asOf = searchParams.get("asof") ?? "2026-08-31";
+  const p = new URL(request.url).searchParams;
+  const asOf = getAsOf(p.get("asof") ?? undefined);
+  const sort = isInvoiceSortKey(p.get("sort")) ? p.get("sort")! : "invoiceDate";
+  const dir = p.get("dir") === "asc" ? "asc" : "desc";
 
   const data = await loadArData();
-  const customers = new Map(
-    data.customers.map((customer) => [customer.id, customer]),
-  );
-
-  const rows = data.invoices
-    .filter((invoice) => invoice.invoiceDate <= asOf)
-    .map((invoice) => ({
-      invoice,
-      position: invoicePosition(data, invoice, asOf),
-    }))
-    .filter(
-      (item): item is typeof item & {
-        position: NonNullable<typeof item.position>;
-      } => item.position !== null,
-    );
-
-  const csvRows = [
-    [
-      "Invoice No",
-      "Customer",
-      "Invoice Date",
-      "Due Date",
-      "Total",
-      "Received",
-      "Credited",
-      "Outstanding",
-      "Status",
-      "Days Late",
-    ],
-    ...rows.map(({ invoice, position }) => [
-      invoice.invoiceNo,
-      customers.get(invoice.customerId)?.name ?? "",
-      invoice.invoiceDate,
-      invoice.dueDate,
-      (invoice.total / 100).toFixed(2),
-      (position.received / 100).toFixed(2),
-      (position.credited / 100).toFixed(2),
-      (position.outstanding / 100).toFixed(2),
-      position.status,
-      String(position.daysPastDue),
-    ]),
-  ];
-
-  const csv = csvRows
-    .map((row) =>
-      row.map((value) =>
-        `"${String(value).replace(/"/g, '""')}"`
-      ).join(","),
-    )
-    .join("\n");
-
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": "attachment; filename=\"invoices.csv\"",
-    },
+  const filter = invoiceFilterFromParams({
+    q: p.get("q"),
+    customer: p.get("customer"),
+    status: p.get("status"),
+    disputed: p.get("disputed"),
+    from: p.get("from"),
+    to: p.get("to"),
   });
+  const rows = sortInvoiceRows(
+    filterInvoiceRows(invoiceListRows(data, asOf), filter),
+    isInvoiceSortKey(sort) ? sort : "invoiceDate",
+    dir
+  );
+  const totals = invoiceListTotals(rows);
+
+  const csv = toCsv([
+    ["Invoices as at", asOf],
+    [],
+    [
+      "Invoice No", "Customer Code", "Customer", "Invoice Date", "Due Date", "Total",
+      "Received", "Credited", "Outstanding", "Status", "Days Late", "Part-paid", "Disputed",
+    ],
+    ...rows.map((r) => {
+      const cancelled = r.status === "Cancelled";
+      return [
+        r.invoice.invoiceNo, r.customerCode, r.customerName, r.invoice.invoiceDate, r.invoice.dueDate,
+        plainAmount(r.invoice.total),
+        cancelled ? "" : plainAmount(r.received),
+        cancelled ? "" : plainAmount(r.credited),
+        cancelled ? "" : plainAmount(r.outstanding),
+        r.status, r.daysLate, r.isPartPaid ? "Yes" : "No", r.isDisputed ? "Yes" : "No",
+      ];
+    }),
+    [
+      `Total (${totals.count}; cancelled excluded from amounts)`, "", "", "", "",
+      plainAmount(totals.total), plainAmount(totals.received), plainAmount(totals.credited),
+      plainAmount(totals.outstanding),
+    ],
+  ]);
+
+  return csvResponse(csv, `Invoices_${asOf}.csv`);
 }

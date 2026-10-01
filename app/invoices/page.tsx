@@ -2,277 +2,225 @@ import Link from "next/link";
 import { loadArData } from "@/lib/ar/load";
 import { getAsOf } from "@/lib/asof";
 import { formatAmount, formatDate } from "@/lib/ar/format";
-import { invoicePosition } from "@/lib/ar/calculations";
+import {
+  filterInvoiceRows,
+  invoiceListRows,
+  invoiceListTotals,
+  INVOICE_STATUSES,
+  invoiceFilterFromParams,
+  isInvoiceSortKey,
+  sortInvoiceRows,
+  type InvoiceListStatus,
+} from "@/lib/ar/lists";
+import SortHeader from "../components/SortHeader";
 
-export default async function InvoicesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    asof?: string;
-    q?: string;
-    status?: string;
-  }>;
-}) {
+type Search = {
+  asof?: string;
+  q?: string;
+  customer?: string;
+  status?: string;
+  disputed?: string;
+  from?: string;
+  to?: string;
+  sort?: string;
+  dir?: string;
+};
+
+export default async function InvoicesPage({ searchParams }: { searchParams: Promise<Search> }) {
   const params = await searchParams;
   const asof = getAsOf(params.asof);
-
   const data = await loadArData();
-  const positions = data.invoices
-  .filter((invoice) => invoice.invoiceDate <= asof)
-  .map((invoice) => invoicePosition(data, invoice, asof))
-  .filter((position): position is NonNullable<typeof position> => position !== null);
 
-  const query = (params.q ?? "").trim().toLowerCase();
-  const status = params.status ?? "All";
+  const filter = invoiceFilterFromParams(params);
+  const sort = isInvoiceSortKey(params.sort) ? params.sort : "invoiceDate";
+  const dir = params.dir === "asc" ? "asc" : params.dir === "desc" ? "desc" : sort === "invoiceDate" ? "desc" : "asc";
 
-  const filtered = positions.filter((position) => {
-    const invoice = position.invoice;
+  const rows = sortInvoiceRows(filterInvoiceRows(invoiceListRows(data, asof), filter), sort, dir);
+  const totals = invoiceListTotals(rows);
 
-    const customer = data.customers.find(
-      (c) => c.id === invoice.customerId
-    );
-
-    const matchesSearch =
-      !query ||
-      invoice.invoiceNo.toLowerCase().includes(query) ||
-      customer?.name.toLowerCase().includes(query) ||
-      customer?.code.toLowerCase().includes(query);
-
-    const matchesStatus =
-      status === "All" ||
-      position.status === status ||
-      (status === "Cancelled" && invoice.isCancelled);
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const totalOutstanding = filtered.reduce(
-    (sum, item) => sum + item.outstanding,
-    0
+  const keep: Record<string, string | undefined> = {
+    asof,
+    q: params.q,
+    customer: params.customer,
+    status: params.status,
+    disputed: params.disputed,
+    from: params.from,
+    to: params.to,
+  };
+  const exportQuery = new URLSearchParams(
+    Object.entries({ ...keep, sort, dir }).filter((e): e is [string, string] => !!e[1])
+  ).toString();
+  const header = (label: string, column: string, align: "left" | "right" = "left") => (
+    <SortHeader label={label} column={column} sort={sort} dir={dir} params={keep} basePath="/invoices" align={align} />
   );
-
-  const totalReceived = filtered.reduce(
-    (sum, item) => sum + item.received,
-    0
-  );
-
-  const totalCredited = filtered.reduce(
-    (sum, item) => sum + item.credited,
-    0
-  );
+  const customers = [...data.customers].sort((a, b) => a.code.localeCompare(b.code));
 
   return (
-    <main className="mx-auto max-w-7xl p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <main className="mx-auto max-w-[90rem] p-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-<a
-  href={`/invoices/export?asof=${asof}`}
-  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
->
-  Export CSV
-</a>
           <h1 className="text-2xl font-bold">Invoices</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Invoice position as at {formatDate(asof)}
-          </p>
+          <p className="mt-1 text-sm text-slate-500">Position as at {formatDate(asof)}</p>
         </div>
-
-        <Link
-          href={`/invoices/new?asof=${encodeURIComponent(asof)}`}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
-        >
-          + New Invoice
-        </Link>
+        <div className="flex gap-2">
+          <a
+            href={`/invoices/export?${exportQuery}`}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            Export CSV
+          </a>
+          <Link
+            href={`/invoices/new?asof=${encodeURIComponent(asof)}`}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+          >
+            + New invoice
+          </Link>
+        </div>
       </div>
 
-      <form className="mb-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-3">
+      <form className="mb-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 md:grid-cols-4 lg:grid-cols-7">
+        <input type="hidden" name="asof" value={asof} />
+        <input type="hidden" name="sort" value={sort} />
+        <input type="hidden" name="dir" value={dir} />
         <input
           name="q"
           defaultValue={params.q ?? ""}
-          placeholder="Search invoice/customer..."
+          placeholder="Invoice number…"
+          aria-label="Search by invoice number"
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
-
-        <select
-          name="status"
-          defaultValue={status}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option>All</option>
-          <option>Due</option>
-          <option>Overdue</option>
-          <option>Paid</option>
-          <option>Cancelled</option>
+        <select name="customer" defaultValue={params.customer ?? ""} aria-label="Customer" className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="">All customers</option>
+          {customers.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.code} — {c.name}
+            </option>
+          ))}
         </select>
-
-        <input type="hidden" name="asof" value={asof} />
-
-        <button
-          type="submit"
-          className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
-        >
-          Apply
-        </button>
+        <select name="status" defaultValue={filter.status} aria-label="Status" className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          {INVOICE_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s === "All" ? "All statuses" : s}
+            </option>
+          ))}
+        </select>
+        <select name="disputed" defaultValue={filter.disputed} aria-label="Disputed" className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="all">Disputed or not</option>
+          <option value="yes">Disputed only</option>
+          <option value="no">Not disputed</option>
+        </select>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-slate-500">From</span>
+          <input type="date" name="from" defaultValue={filter.from ?? ""} className="w-full rounded-lg border border-slate-300 px-2 py-2" />
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-slate-500">To</span>
+          <input type="date" name="to" defaultValue={filter.to ?? ""} className="w-full rounded-lg border border-slate-300 px-2 py-2" />
+        </label>
+        <div className="flex gap-2">
+          <button type="submit" className="flex-1 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600">
+            Apply
+          </button>
+          <Link href={`/invoices?asof=${asof}`} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+            Reset
+          </Link>
+        </div>
       </form>
 
-      <div className="mb-5 grid gap-4 md:grid-cols-3">
-        <SummaryCard
-          label="Filtered Invoices"
-          value={String(filtered.length)}
-        />
-
-        <SummaryCard
-          label="Received"
-          value={formatAmount(totalReceived)}
-        />
-
-        <SummaryCard
-          label="Outstanding"
-          value={formatAmount(totalOutstanding)}
-        />
-      </div>
-
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
-              <th className="px-4 py-3">Invoice</th>
-              <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Invoice Date</th>
-              <th className="px-4 py-3">Due Date</th>
-              <th className="px-4 py-3 text-right">Total</th>
-              <th className="px-4 py-3 text-right">Received</th>
-              <th className="px-4 py-3 text-right">Credited</th>
-              <th className="px-4 py-3 text-right">Outstanding</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Days Late</th>
+              {header("Invoice", "invoiceNo")}
+              {header("Customer", "customer")}
+              {header("Invoice date", "invoiceDate")}
+              {header("Due date", "dueDate")}
+              {header("Total", "total", "right")}
+              {header("Received", "received", "right")}
+              {header("Credited", "credited", "right")}
+              {header("Outstanding", "outstanding", "right")}
+              {header("Status", "status")}
+              {header("Days late", "daysLate", "right")}
             </tr>
           </thead>
-
           <tbody>
-            {filtered.map((position) => {
-              const customer = data.customers.find(
-                (c) => c.id === position.invoice.customerId
-              );
-
+            {rows.map((row) => {
+              const cancelled = row.status === "Cancelled";
               return (
                 <tr
-                  key={position.invoice.id}
-                  className="border-b border-slate-100 hover:bg-slate-50"
+                  key={row.invoice.id}
+                  className={`border-b border-slate-100 ${
+                    row.status === "Overdue" ? "bg-red-50 text-red-900" : cancelled ? "text-slate-400" : ""
+                  }`}
                 >
-                  <td className="px-4 py-3 font-medium">
-                    <Link
-                      href={`/invoices/${position.invoice.id}?asof=${encodeURIComponent(asof)}`}
-                      className="text-blue-600 hover:underline"
-                    >
-                      {position.invoice.invoiceNo}
+                  <td className="px-3 py-2.5">
+                    <Link href={`/invoices/${row.invoice.id}?asof=${asof}`} className="font-medium text-blue-700 hover:underline">
+                      {row.invoice.invoiceNo}
                     </Link>
-
-                    {position.invoice.isDisputed && (
-                      <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-                        Disputed
-                      </span>
-                    )}
-
-                    {position.isPartPaid && (
-                      <span className="ml-2 rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
-                        Part-paid
-                      </span>
-                    )}
                   </td>
-
-                  <td className="px-4 py-3">
-                    {customer?.code} — {customer?.name}
+                  <td className="px-3 py-2.5">
+                    {row.customerCode} — {row.customerName}
                   </td>
-
-                  <td className="px-4 py-3">
-                    {formatDate(position.invoice.invoiceDate)}
+                  <td className="px-3 py-2.5">{formatDate(row.invoice.invoiceDate)}</td>
+                  <td className="px-3 py-2.5">{formatDate(row.invoice.dueDate)}</td>
+                  <td className={`px-3 py-2.5 text-right tabular-nums ${cancelled ? "line-through" : ""}`}>
+                    {formatAmount(row.invoice.total)}
                   </td>
-
-                  <td className="px-4 py-3">
-                    {formatDate(position.invoice.dueDate)}
+                  <td className="px-3 py-2.5 text-right tabular-nums">{cancelled ? "—" : formatAmount(row.received)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{cancelled ? "—" : formatAmount(row.credited)}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+                    {cancelled ? "—" : formatAmount(row.outstanding)}
                   </td>
-
-                  <td className="px-4 py-3 text-right">
-                    {formatAmount(position.invoice.total)}
-                  </td>
-
-                  <td className="px-4 py-3 text-right">
-                    {formatAmount(position.received)}
-                  </td>
-
-                  <td className="px-4 py-3 text-right">
-                    {formatAmount(position.credited)}
-                  </td>
-
-                  <td className="px-4 py-3 text-right font-medium">
-                    {formatAmount(position.outstanding)}
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <span
-                      className={
-                        position.status === "Overdue"
-                          ? "font-semibold text-red-600"
-                          : position.status === "Paid"
-                            ? "text-green-600"
-                            : "text-slate-700"
-                      }
-                    >
-                      {position.status}
+                  <td className="px-3 py-2.5">
+                    <span className="flex flex-wrap gap-1">
+                      <StatusBadge status={row.status} />
+                      {row.isPartPaid && <Label tone="slate">Part-paid</Label>}
+                      {row.isDisputed && <Label tone="amber">Disputed</Label>}
                     </span>
                   </td>
-
-                  <td className="px-4 py-3">
-                    {position.daysPastDue > 0
-                      ? position.daysPastDue
-                      : "—"}
-                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{row.daysLate > 0 ? row.daysLate : "—"}</td>
                 </tr>
               );
             })}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={10} className="px-3 py-10 text-center text-slate-500">
+                  No invoices match these filters.
+                </td>
+              </tr>
+            )}
           </tbody>
-
           <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
             <tr>
-              <td colSpan={5} className="px-4 py-3">
-                Totals
+              <td className="px-3 py-3" colSpan={4}>
+                Total · {totals.count} invoice{totals.count === 1 ? "" : "s"}
+                <span className="block text-xs font-normal text-slate-500">Cancelled invoices are listed but not added in.</span>
               </td>
-              <td className="px-4 py-3 text-right">
-                {formatAmount(totalReceived)}
-              </td>
-              <td className="px-4 py-3 text-right">
-                {formatAmount(totalCredited)}
-              </td>
-              <td className="px-4 py-3 text-right">
-                {formatAmount(totalOutstanding)}
-              </td>
-              <td colSpan={2}></td>
+              <td className="px-3 py-3 text-right tabular-nums">{formatAmount(totals.total)}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{formatAmount(totals.received)}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{formatAmount(totals.credited)}</td>
+              <td className="px-3 py-3 text-right tabular-nums">{formatAmount(totals.outstanding)}</td>
+              <td colSpan={2} />
             </tr>
           </tfoot>
         </table>
-
-        {filtered.length === 0 && (
-          <div className="p-8 text-center text-sm text-slate-500">
-            No invoices found.
-          </div>
-        )}
       </div>
     </main>
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-2 text-xl font-bold">{value}</p>
-    </div>
-  );
+function StatusBadge({ status }: { status: InvoiceListStatus }) {
+  const tone = { Paid: "green", Due: "blue", Overdue: "red", Cancelled: "slate" } as const;
+  return <Label tone={tone[status]}>{status}</Label>;
+}
+
+function Label({ tone, children }: { tone: "green" | "blue" | "red" | "slate" | "amber"; children: React.ReactNode }) {
+  const styles = {
+    green: "bg-green-100 text-green-800",
+    blue: "bg-blue-100 text-blue-800",
+    red: "bg-red-100 text-red-800",
+    slate: "bg-slate-200 text-slate-700",
+    amber: "bg-amber-100 text-amber-800",
+  };
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${styles[tone]}`}>{children}</span>;
 }

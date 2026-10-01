@@ -2,14 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { loadArData } from "@/lib/ar/load";
 import { supabase } from "@/lib/db";
+import { loadArData } from "@/lib/ar/load";
+import { draftCreditNote, isDuplicateNumberError } from "@/lib/ar/drafts";
 
 const schema = z.object({
   invoiceId: z.coerce.number().int().positive(),
-  creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  taxableValue: z.coerce.number().positive(),
-  reason: z.string().trim().min(1),
+  creditNoteDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date."),
+  taxableValue: z.coerce
+    .number()
+    .positive("The taxable value must be more than zero.")
+    .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, "Use at most 2 decimals."),
+  reason: z.string().trim().min(1, "Enter a reason.").max(500),
 });
 
 export async function createCreditNote(formData: FormData) {
@@ -19,131 +23,40 @@ export async function createCreditNote(formData: FormData) {
     taxableValue: formData.get("taxableValue"),
     reason: formData.get("reason"),
   });
-
   if (!parsed.success) {
-    return {
-      success: false,
-      error:
-        parsed.error.issues[0]?.message ??
-        "Invalid credit note details",
-    };
+    return { success: false, error: parsed.error.issues[0]?.message ?? "Please check the credit note." };
   }
-
   const values = parsed.data;
-  const data = await loadArData();
+  const input = {
+    invoiceId: values.invoiceId,
+    creditNoteDate: values.creditNoteDate,
+    taxable: Math.round(values.taxableValue * 100),
+  };
 
-  const invoice = data.invoices.find(
-    (item) => item.id === values.invoiceId
-  );
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const data = await loadArData();
+    const draft = draftCreditNote(data, input);
+    if (draft.errors.length > 0) return { success: false, error: draft.errors.join(" ") };
 
-  if (!invoice) {
-    return {
-      success: false,
-      error: "Invoice not found",
-    };
-  }
-
-  if (invoice.isCancelled) {
-    return {
-      success: false,
-      error: "A cancelled invoice cannot receive a credit note",
-    };
-  }
-
-  if (values.creditNoteDate < invoice.invoiceDate) {
-    return {
-      success: false,
-      error: "Credit note date cannot be before invoice date",
-    };
-  }
-
-  const taxablePaise = Math.round(values.taxableValue * 100);
-
-  const gstPaise = Math.round(
-    (taxablePaise * invoice.gstRatePct) / 100
-  );
-
-  let cgstPaise = 0;
-  let sgstPaise = 0;
-  let igstPaise = 0;
-
-  const customer = data.customers.find(
-    (item) => item.id === invoice.customerId
-  );
-
-  if (customer?.state?.toLowerCase() === "maharashtra") {
-    cgstPaise = Math.round(gstPaise / 2);
-    sgstPaise = gstPaise - cgstPaise;
-  } else {
-    igstPaise = gstPaise;
-  }
-
-  const totalPaise =
-    taxablePaise +
-    cgstPaise +
-    sgstPaise +
-    igstPaise;
-
-  const allocatedPaise = data.allocations
-    .filter((item) => item.invoiceId === invoice.id)
-    .reduce((sum, item) => sum + item.amount, 0);
-
-  const existingCreditPaise = data.creditNotes
-    .filter((item) => item.invoiceId === invoice.id)
-    .reduce((sum, item) => sum + item.total, 0);
-
-  if (
-    allocatedPaise +
-      existingCreditPaise +
-      totalPaise >
-    invoice.total
-  ) {
-    return {
-      success: false,
-      error:
-        "Credit note exceeds the invoice amount after existing allocations and credit notes",
-    };
-  }
-
-  const nextNumber =
-    data.creditNotes.reduce((max, note) => {
-      const match = note.creditNoteNo.match(/(\d+)$/);
-      return Math.max(
-        max,
-        match ? Number(match[1]) : 0
-      );
-    }, 0) + 1;
-
-  const creditNoteNo =
-    `BWA/CN/26-27/${String(nextNumber).padStart(3, "0")}`;
-
-  const { error } = await supabase
-    .from("credit_notes")
-    .insert({
-      invoice_id: invoice.id,
-      credit_note_no: creditNoteNo,
+    const { error } = await supabase.from("credit_notes").insert({
+      invoice_id: values.invoiceId,
+      credit_note_no: draft.creditNoteNo,
       credit_note_date: values.creditNoteDate,
       reason: values.reason,
-      taxable_value: taxablePaise / 100,
-      cgst: cgstPaise / 100,
-      sgst: sgstPaise / 100,
-      igst: igstPaise / 100,
-      total: totalPaise / 100,
+      taxable_value: input.taxable / 100,
+      cgst: draft.gst.cgst / 100,
+      sgst: draft.gst.sgst / 100,
+      igst: draft.gst.igst / 100,
+      total: draft.total / 100,
     });
 
-  if (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
+    if (!error) {
+      revalidatePath("/", "layout");
+      return { success: true, creditNoteNo: draft.creditNoteNo };
+    }
+    if (!isDuplicateNumberError(error.message) || attempt === 1) {
+      return { success: false, error: error.message };
+    }
   }
-
-  revalidatePath(`/invoices/${invoice.id}`);
-  revalidatePath("/invoices");
-  revalidatePath("/");
-
-  return {
-    success: true,
-    creditNoteNo,
-  };
+  return { success: false, error: "The credit note could not be saved." };
 }

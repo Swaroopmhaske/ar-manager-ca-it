@@ -4,6 +4,7 @@ import { loadArData } from "@/lib/ar/load";
 import { getAsOf } from "@/lib/asof";
 import { formatAmount, formatDate } from "@/lib/ar/format";
 import CreditNoteForm from "./CreditNoteForm";
+import { draftCreditNote } from "@/lib/ar/drafts";
 
 export default async function CreditNotePage({
   params,
@@ -27,6 +28,11 @@ export default async function CreditNotePage({
   }
 
   const effectiveAsof = getAsOf(asof);
+  const { available } = draftCreditNote(data, {
+    invoiceId: invoice.id,
+    creditNoteDate: effectiveAsof,
+    taxable: 0,
+  });
 
   return (
     <main className="mx-auto max-w-3xl p-6">
@@ -76,8 +82,10 @@ export default async function CreditNotePage({
       <div className="mt-6">
         <CreditNoteForm
           invoiceId={invoice.id}
-          invoiceTotal={invoice.total}
           gstRatePct={invoice.gstRatePct}
+          intraState={invoice.igst === 0 && invoice.cgst + invoice.sgst > 0}
+          available={available}
+          invoiceDate={invoice.invoiceDate}
           asof={effectiveAsof}
         />
       </div>

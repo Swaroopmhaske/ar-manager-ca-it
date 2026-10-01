@@ -8,8 +8,14 @@ const navigation = [
   { label: "Dashboard", href: "/" },
   { label: "Customers", href: "/customers" },
   { label: "Invoices", href: "/invoices" },
-  { label: "Receipts", href: "/receipts/new" },
+  { label: "Receipts", href: "/receipts" },
+  { label: "Statement", href: "/statement" },
 ];
+
+/** Today in India (R10 default), computed the same way as lib/asof.ts. */
+function todayInIndia(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+}
 
 export default function Header() {
   const pathname = usePathname();
@@ -17,8 +23,7 @@ export default function Header() {
   const searchParams = useSearchParams();
 
   const currentAsOf = searchParams.get("asof") ?? "";
-
-  const [asof, setAsOf] = useState(currentAsOf);
+  const [asof, setAsOf] = useState(currentAsOf || todayInIndia());
 
   function updateAsOf(value: string) {
     setAsOf(value);
@@ -35,7 +40,7 @@ export default function Header() {
   }
 
   return (
-    <header className="border-b bg-white">
+    <header className="border-b bg-white print:hidden">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <div>
           <Link
@@ -57,8 +62,7 @@ export default function Header() {
                 : item.href;
 
             const active =
-              pathname === item.href ||
-              (item.href === "/" && pathname === "/");
+              item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
 
             return (
               <Link

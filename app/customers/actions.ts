@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { supabase, AR_WORKSPACE_ID } from "@/lib/db";
+import { supabase } from "@/lib/db";
 export async function createNote(input: {
   customerId: number;
   invoiceId: number | null;
@@ -67,7 +67,6 @@ export async function createNote(input: {
     .from("customers")
     .select("id")
     .eq("id", values.customerId)
-    .eq("workspace_id", AR_WORKSPACE_ID)
     .single();
 
   if (customerError || !customer) {
@@ -82,7 +81,6 @@ export async function createNote(input: {
       .from("invoices")
       .select("id,customer_id")
       .eq("id", values.invoiceId)
-      .eq("workspace_id", AR_WORKSPACE_ID)
       .single();
 
     if (invoiceError || !invoice) {
@@ -152,7 +150,6 @@ export async function markFollowUpDone(input: {
     .from("notes")
     .select("id, customer_id")
     .eq("id", values.noteId)
-    .eq("workspace_id", AR_WORKSPACE_ID)
     .single();
 
   if (noteError || !note) {
@@ -172,8 +169,7 @@ export async function markFollowUpDone(input: {
   const { error } = await supabase
     .from("notes")
     .update({ follow_up_done: true })
-    .eq("id", values.noteId)
-    .eq("workspace_id", AR_WORKSPACE_ID);
+    .eq("id", values.noteId);
 
   if (error) {
     return {

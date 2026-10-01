@@ -6,16 +6,17 @@ import InvoiceForm from "../InvoiceForm";
 export default async function NewInvoicePage({
   searchParams,
 }: {
-  searchParams: Promise<{ asof?: string }>;
+  searchParams: Promise<{ asof?: string; customer?: string }>;
 }) {
   const params = await searchParams;
   const asof = getAsOf(params.asof);
 
   const data = await loadArData();
 
-  const activeCustomers = data.customers.filter(
-    (customer) => customer.isActive
-  );
+  const activeCustomers = data.customers
+    .filter((customer) => customer.isActive)
+    .sort((a, b) => a.code.localeCompare(b.code))
+    .map(({ id, code, name }) => ({ id, code, name }));
 
   return (
     <main className="mx-auto max-w-5xl p-6">
@@ -37,6 +38,7 @@ export default async function NewInvoicePage({
       <InvoiceForm
         asof={asof}
         customers={activeCustomers}
+        initialCustomerId={Number(params.customer) || undefined}
       />
     </main>
   );
